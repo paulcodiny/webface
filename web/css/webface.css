@@ -1,0 +1,104 @@
+html {
+    overflow-y: scroll;
+}
+
+.content-list h2 a {
+    font-weight: normal;
+}
+
+/* Filter form in list */
+.list-filter select,
+.list-filter input {
+    margin-bottom: 0;
+}
+
+.list-filter select {
+    width: 180px;
+}
+
+.list-filter input[type=text] {
+    width: 120px;
+}
+
+/* Entity form in list */
+.list-entity select,
+.list-entity input {
+    margin-bottom: 0;
+}
+
+.list-entity input[type="text"],
+.list-entity input[type="email"],
+.list-entity input[type="search"] {
+    width: 90px;
+}
+
+.list-entity input[type="datetime"],
+.list-entity input[type="datetime-local"],
+.list-entity input[type="date"],
+.list-entity input[type="month"],
+.list-entity input[type="time"],
+.list-entity input[type="week"],
+.list-entity input[type="number"],
+.list-entity input[type="url"],
+.list-entity input[type="tel"],
+.list-entity input[type="color"] {
+    width: 60px;
+}
+
+
+.field-enum-expanded input[type=radio] {
+    float: left;
+    margin-right: 4px;
+}
+
+.editable-image {
+
+}
+
+.editable-image label {
+    height: 30px;
+}
+
+.editable-image input[type=radio] {
+    float: left;
+    margin: 3px 5px 0 0;
+}
+
+.editable-image input[type=file] {
+    float: right;
+    margin-top: -4px;
+}
+
+.collection {
+    display: none;
+}
+
+.entity-with-groups .collection {
+    display: block;
+}
+
+.js-link {
+    border-bottom: dashed 1px;
+    text-decoration: none;
+}
+
+.js-link:hover {
+    border-bottom: none;
+    text-decoration: none;
+}
+
+.grouped-choice {
+    max-height: 200px;
+    overflow: hidden;
+    overflow-y: visible;
+    width: 400px;
+}
+
+.grouped-choice .grouped-choice-nested {
+    display: none;
+    margin-left: 13px;
+}
+
+.entity-actions {
+    margin-top: 20px;
+}
