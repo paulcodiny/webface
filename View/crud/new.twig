@@ -1,0 +1,36 @@
+{% extends ajax ? 'ajax-layout.twig' : 'layout.twig' %}
+
+{% form_theme form 'fields.twig' %}
+
+{% block content %}
+    <div class="span9 content-update content-update-{{ table }}">
+        {# <a href="{{ path('auto_brands_new') }}" data-toggle="modal" data-target="#modal">Добавить марку</a> #}
+
+        <h2>{{ webface_current_table_label }} / Добавление</h2>
+        {% include 'partials/flash.twig' %}
+        <form action="{{ path(table ~ '_create') }}" method="post" {{ form_enctype(form) }} class="{{ webface_need_groups is defined ? 'with-groups' : '' }}">
+            {% include 'partials/form.twig' %}
+            <div class="entity-actions">
+                <button name="next" value="new" class="btn btn-primary">Добавить и продолжить</button>
+                <button name="next" value="list" class="btn">Добавить и вернуться к списку</button>
+            </div>
+        </form>
+    </div><!--/span-->
+
+    {#
+    @todo Проверка, на то, что у нас есть relationы
+    <div id="modal" class="modal hide fade">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+            <h3>Добавление марки</h3>
+        </div>
+        <div class="modal-body">
+            <p>One fine body…</p>
+        </div>
+        <div class="modal-footer">
+            <a href="#" class="btn">Close</a>
+            <a href="#" class="btn btn-primary">Save changes</a>
+        </div>
+    </div>
+    #}
+{% endblock %}

@@ -1,0 +1,23 @@
+<div class="pagination pagination-centered">
+    <ul>
+        {% if is_prev %}
+            <li><a href="{{ path(table ~ '_list', { page: current_page - 1 }) }}?{{ http_query }}">&laquo;</a></li>
+        {% else %}
+            <li class="disabled"><span>&laquo;</span></li>
+        {% endif %}
+
+        {% for p in 1..max_page %}
+            {% if p == current_page %}
+                <li class="active"><span>{{ p }}</span></li>
+            {% else %}
+                <li><a href="{{ path(table ~ '_list', { page: p }) }}?{{ http_query }}">{{ p }}</a></li>
+            {% endif %}
+        {% endfor %}
+
+        {% if is_next %}
+            <li><a href="{{ path(table ~ '_list', { page: current_page + 1 }) }}?{{ http_query }}">&raquo;</a></li>
+        {% else %}
+            <li class="disabled"><span>&raquo;</span></li>
+        {% endif %}
+    </ul>
+</div>

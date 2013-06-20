@@ -1,0 +1,24 @@
+{% if webface_need_groups is defined %}
+    {% spaceless %}
+        <div id="{{ form.vars().id }}" class="entity-with-groups">
+            <ul class="nav nav-tabs">
+                {% for group, group_label in webface_need_groups %}
+                    <li class="{{ loop.first ? 'active' : '' }}"><a href="#{{ group }}" data-toggle="tab">{{ group_label }}</a></li>
+                {% endfor %}
+            </ul>
+            {{ form_errors(form) }}
+            <div class="tab-content">
+                {% for group, fields in webface_fields_by_group %}
+                    <div id="{{ group }}" class="tab-pane fade {{ loop.first ? 'in active' : '' }}">
+                        {% for fieldName, field in fields %}
+                            {{ form_row(form[field.name]) }}
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            {{ form_rest(form) }}
+        </div>
+    {% endspaceless %}
+{% else %}
+    {{ form_widget(form) }}
+{% endif %}

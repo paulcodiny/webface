@@ -1,0 +1,63 @@
+{% extends 'layout.twig' %}
+
+{% block content %}
+    <div class="span9 content-list content-list-{{ table }}">
+        <h2>{{ webface_current_table_label }} (<a href="{{ path(table ~ '_new') }}">Добавить</a>)</h2>
+        {% include 'partials/flash.twig' %}
+        <table {{ webface_need_list_inline_edit is defined ? 'id="list-inline-edit"' : '' }} class="table table-striped  table-bordered">
+            <thead>
+            <tr>
+                {% for field in fields %}
+                    <th>{{ field.label }}</th>
+                {% endfor %}
+                <td></td>
+            </tr>
+            </thead>
+            <tbody>
+            {% if filter|length %}
+                <tr id="list-filter" class="list-filter">
+                    {% for name, field in fields %}
+                        {% if name in filter|keys %}
+                            <td class="list-filter-{{ name }}">{{ form_widget(filter[name]) }}</td>
+                        {% else %}
+                            <td></td>
+                        {% endif %}
+                    {% endfor %}
+                    <td>
+                        <a href="{{ path(table ~ '_list') }}" id="filter-apply">Применить</a>
+                        <a href="{{ path(table ~ '_list') }}" id="filter-clear">Сбросить</a>
+                    </td>
+                </tr>
+            {% endif %}
+            {% for entity in entities %}
+                <tr class="list-entity">
+                    {% for name, field in fields %}
+                        <td class="list-entity-{{ name }}">
+                            {% if field.config.list_edit is defined and entity.list_edit_form[name] is defined %}
+                                {{ form_widget(entity.list_edit_form[name]) }}
+                            {% else %}
+                                {{ entity[name]|raw }}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                    <td>
+                        {% for actionUrl, actionName in entity.actions %}
+                            {% if actionUrl == '_edit' %}
+                                <a href="{{ path(table ~ '_edit', { id: entity.id }) }}" class="link-edit">{{ actionName }}</a>
+                            {% elseif actionUrl == '_delete' %}
+                                <a href="{{ path(table ~ '_delete', { id: entity.id }) }}" onclick="if (confirm('Действительно удалить запись?')) { $.post($(this).attr('href'), function() { location.reload(); }); } return false;">{{ actionName }}</a>
+                            {% else %}
+                                <a href="{{ actionUrl }}">{{ actionName }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        {% include 'partials/pagination.twig' with paging %}
+
+        <a href="{{ path(table ~ '_new') }}">Добавить</a>
+    </div><!--.span9-->
+{% endblock %}

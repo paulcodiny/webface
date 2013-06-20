@@ -1,0 +1,155 @@
+{% block editable_image_widget %}
+    {% spaceless %}
+        {% if value %}
+            <ul class="thumbnails editable-image">
+                <li class="span3">
+                    <a href="{{ value }}" class="thumbnail">
+                        <img src="{{ value }}" alt="{{ value }}" width="120" />
+                    </a>
+                </li>
+                <li class="span5">
+                    <label for="{{ action_id }}_stet">
+                        <input type="radio" name="{{ action_name }}" id="{{ action_id }}_stet" checked="checked" value="stet" />
+                        Оставить
+                    </label>
+                    <label for="{{ action_id }}_update">
+                        <input type="radio" name="{{ action_name }}" id="{{ action_id }}_update" value="update" />
+                        Заменить на
+                        <input type="file" {{ block('widget_attributes') }} />
+                    </label>
+                    {% if allow_delete %}
+                        <label for="{{ action_id }}_delete">
+                            <input type="radio" name="{{ action_name }}" id="{{ action_id }}_delete" value="delete" />
+                            Удалить
+                        </label>
+                    {% endif %}
+                </li>
+            </ul>
+        {% else %}
+            {% set type = type|default('text') %}
+            <input type="{{ type }}" {{ block('widget_attributes') }} {% if value is not empty %}value="{{ value }}" {% endif %}/>
+        {% endif %}
+    {% endspaceless %}
+{% endblock editable_image_widget %}
+
+{% block tinymce_textarea_widget %}
+    {% spaceless %}
+        <textarea {{ block('widget_attributes') }}>{{ value }}</textarea>
+    {% endspaceless %}
+{% endblock tinymce_textarea_widget %}
+
+{% block choice_widget_expanded %}
+    {% spaceless %}
+        <div {{ block('widget_container_attributes') }}>
+            {% set label_attr = label_attr|merge({'class': (label_attr.class|default('') ~ ' checkbox')|trim}) %}
+            {% if not compound %}
+                {% set label_attr = label_attr|merge({'for': id}) %}
+            {% endif %}
+            {% if required %}
+                {% set label_attr = label_attr|merge({'class': label_attr.class ~ ' required'}) %}
+            {% endif %}
+
+            {% for child in form %}
+                {% if child.getVar('label') is empty %}
+                    {% set label = name|humanize %}
+                {% else %}
+                    {% set label = child.getVar('label') %}
+                {% endif %}
+                <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
+                    {{ form_widget(child) }}
+                    {{ label|trans({}, translation_domain) }}
+                </label>
+            {% endfor %}
+        </div>
+    {% endspaceless %}
+{% endblock choice_widget_expanded %}
+
+{% block grouped_choice_widget %}
+    {% spaceless %}
+        <div {{ block('widget_container_attributes') }}>
+            {% set label_attr = label_attr|merge({'class': (label_attr.class|default('') ~ ' checkbox')|trim}) %}
+
+            {% if required %}
+                {% set label_attr = label_attr|merge({'class': label_attr.class ~ ' required'}) %}
+            {% endif %}
+
+            <a href="javascript:;" class="link-check-all js-link">Выделить всё</a> / <a href="javascript:;" class="link-uncheck-all js-link">Убрать выделение</a><br />
+
+            {% if has_groups %}
+                {% for index, choice in choices %}
+                    <label class="grouped-choice-index-label checkbox">
+                        <input type="checkbox" name="grouped_choice_index_checkbox" class="grouped-choice-index-checkbox" />
+                        <a href="javascript:;" class="grouped-choice-index js-link">{{ index|trans({}, translation_domain) }}</a><br />
+                    </label>
+
+                    <div class="grouped-choice-nested">
+                        {% for nested_choice in choice %}
+                            {% for child in form %}
+                                {% if child.getVar('value') == nested_choice.value %}
+                                    {% if child.getVar('label') is empty %}
+                                        {% set label = name|humanize %}
+                                    {% else %}
+                                        {% set label = child.getVar('label') %}
+                                    {% endif %}
+                                    <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
+                                    {{ form_widget(child) }}
+                                    {{ label|trans({}, translation_domain) }}
+                                    </label>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+
+                {% endfor %}
+            {% else %}
+                {% for child in form %}
+                    {% if child.getVar('label') is empty %}
+                        {% set label = name|humanize %}
+                    {% else %}
+                        {% set label = child.getVar('label') %}
+                    {% endif %}
+                    <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
+                        {{ form_widget(child) }}
+                        {{ label|trans({}, translation_domain) }}
+                    </label>
+                {% endfor %}
+            {% endif %}
+        </div>
+    {% endspaceless %}
+{% endblock grouped_choice_widget %}
+
+{% block auto_brand_model_pack_widget %}
+    {% spaceless %}
+        <div {{ block('widget_container_attributes') }}>
+            {% set label_attr = label_attr|merge({'class': (label_attr.class|default('') ~ ' checkbox')|trim}) %}
+            {% set label_attr = label_attr|merge({'class': label_attr.class ~ ' required'}) %}
+
+            <a href="javascript:;" class="link-check-all js-link">Выделить всё</a> / <a href="javascript:;" class="link-uncheck-all js-link">Убрать выделение</a><br />
+
+            {% for brand in autos %}
+                <label class="grouped-choice-index-label checkbox">
+                    <input type="checkbox" name="grouped_choice_index_checkbox" class="grouped-choice-index-checkbox" {{ brand.checked is defined ? 'checked="checked"' : '' }} />
+                    <a href="javascript:;" class="grouped-choice-index js-link">{{ brand.name }}</a><br />
+                </label>
+
+                <div class="grouped-choice-nested">
+                    {% for model in brand.models %}
+                        <label class="grouped-choice-index-label checkbox">
+                            <input type="checkbox" name="grouped_choice_index_checkbox" class="grouped-choice-index-checkbox" {{ model.checked is defined ? 'checked="checked"' : '' }} />
+                            <a href="javascript:;" class="grouped-choice-index js-link">{{ model.name }}</a><br />
+                        </label>
+
+                        <div class="grouped-choice-nested">
+                            {% for pack in model.packs %}
+                                <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
+                                    {{ form_widget(form[pack.field]) }}
+                                    {{ pack.name }}
+                                </label>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+    {% endspaceless %}
+{% endblock auto_brand_model_pack_widget %}

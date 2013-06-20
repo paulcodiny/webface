@@ -1,0 +1,22 @@
+{% extends 'layout.twig' %}
+
+{% form_theme form 'fields.twig' %}
+
+{% block content %}
+    <div class="span9 content-update content-update-{{ table }}">
+        <h2>{{ webface_current_table_label }} / Редактирование</h2>
+        {% include 'partials/flash.twig' %}
+        <form action="{{ path(table ~ '_update', { id: entity.id }) }}" method="post" {{ form_enctype(form) }} class="{{ webface_need_groups is defined ? 'with-groups' : '' }}">
+            {% include 'partials/form.twig' %}
+            <div class="entity-actions">
+                <button name="next" value="edit" class="btn btn-primary">Сохранить и продолжить</button>
+                <button name="next" value="list" class="btn">Сохранить и вернуться к списку</button>
+            </div>
+        </form>
+    </div><!--/span-->
+
+    <!-- @todo Проверка, на то, что у нас есть relationы -->
+    <script type="text/javascript">
+
+    </script>
+{% endblock %}

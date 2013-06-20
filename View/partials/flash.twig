@@ -1,0 +1,6 @@
+{% if wf_flash is defined %}
+    <div class="alert alert-{{ wf_flash.type }}">
+        <button type="button" class="close" data-dismiss="alert">×</button>
+        {{ wf_flash.text }}
+    </div>
+{% endif %}
