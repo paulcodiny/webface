@@ -3,8 +3,10 @@
 namespace WebFace\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\AbstractTypeExtension;
 use Symfony\Component\Form\FormBuilder;
 use Symfony\Component\Form\FormInterface;
+use Symfony\Component\Form\FormView;
 use Symfony\Component\Form\FormViewInterface;
 use Symfony\Component\OptionsResolver\OptionsResolverInterface;
 
@@ -13,7 +15,7 @@ class EditableImageType extends AbstractType
     /**
      * {@inheritdoc}
      */
-    public function buildView(FormViewInterface $view, FormInterface $form, array $options)
+    public function buildView(FormView $view, FormInterface $form, array $options)
     {
         parent::buildView($view, $form, $options);
 
@@ -21,11 +23,11 @@ class EditableImageType extends AbstractType
             $value = $options['path'] . $value;
         }
 
-        $name = $view->getVar('name');
-        $actionName = str_replace($name, '_' . $name . '_action', $view->getVar('full_name'));
-        $actionId   = str_replace($name, '_' . $name . '_action', $view->getVar('id'));
+        $name = $view->vars['name'];
+        $actionName = str_replace($name, '_' . $name . '_action', $view->vars['full_name']);
+        $actionId   = str_replace($name, '_' . $name . '_action', $view->vars['id']);
 
-        $view->addVars(array(
+        $view->vars = array_merge($view->vars, array(
             'required'     => false,
             'action_id'    => $actionId,
             'action_name'  => $actionName,
@@ -39,6 +41,7 @@ class EditableImageType extends AbstractType
         $resolver->setDefaults(array(
             'path' => '/',
             'allow_delete' => false,
+            'data_class' => null,
         ));
     }
 

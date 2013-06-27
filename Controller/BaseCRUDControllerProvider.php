@@ -2,20 +2,25 @@
 
 namespace WebFace\Controller;
 
-use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Silex\ControllerCollection;
+use WebFace\Form\Type\EmbeddedHasManyFormType;
 
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\Form\FormBuilderInterface;
-use Symfony\Component\Form\Exception\FormException;
-use Symfony\Component\Form\Extension\Core\Type\FormType;
+use Symfony\Component\Form\Exception\InvalidConfigurationException;
 
 use Doctrine\Common\Util\Inflector;
 
 use Silex\Application;
 use Silex\ControllerProviderInterface;
-use Silex\ControllerCollection;
-use WebFace\Form\Type\EmbeddedHasManyFormType;
+
+use LogicException;
 
 
+/**
+ * Class BaseCRUDControllerProvider
+ * @package WebFace\Controller
+ */
 class BaseCRUDControllerProvider implements ControllerProviderInterface
 {
     protected $table = null;
@@ -30,6 +35,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     {
         $t = clone $this;
 
+        /** @var ControllerCollection $controllers */
         $controllers = $app['controllers_factory'];
 
         $controllers->before(function() use ($app, $t) {
@@ -79,6 +85,12 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         $app['webface.admin']->setCurrentTable($this->table);
 
         $app['twig']->addGlobal('webface_current_table_label', $app['webface.admin']->getCurrentTableLabel());
+
+        $token = $app['security']->getToken();
+        if (!empty($token)) {
+            $user = $token->getUser();
+            $app['twig']->addGlobal('webface_username', $user->getUsername());
+        }
     }
 
     public function afterAction()
@@ -114,17 +126,22 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     }
 
     /**
+     * @param \Silex\Application $app
+     *
      * @return array
      */
-    public function getListFieldNames()
+    public function getListFieldNames(Application $app)
     {
         return array();
     }
 
     /**
+     * @param \Silex\Application $app
+     * @param null               $data
+     *
      * @return array
      */
-    public function getFormFieldNames()
+    public function getFormFieldNames(Application $app, $data = null)
     {
         return array();
     }
@@ -150,6 +167,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return array('_edit' => 'Редактировать', '_delete' => 'Удалить');
     }
 
+    public function getListActions($app)
+    {
+        return array('_add' => 'Добавить');
+    }
+
     /**
      * Строка с тем, как сортировать данные в списке
      * @return string
@@ -170,7 +192,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         $describedFields = array();
         foreach ($fields as $field) {
             if (!isset($allFields[$field])) {
-                throw new FormException('Field "' . $field . '" does not exist in method getFields()');
+                throw new InvalidConfigurationException('Field "' . $field . '" does not exist in method getFields()');
             }
             $fieldDescription = $allFields[$field];
 
@@ -199,6 +221,34 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return $describedFields;
     }
 
+    /**
+     * @param Application $app
+     * @param             $groups
+     *
+     * @throws \LogicException
+     */
+    public function addGroupsViewData(Application $app, $groups)
+    {
+        $formGroups = $this->getFormGroups();
+        $needGroups = array();
+        foreach ($formGroups as $formGroupName => $formGroupDefinition) {
+            if (is_array($formGroupDefinition)) {
+                if (!isset($formGroupDefinition['label'])) {
+                    throw new LogicException('Group "' . $formGroupName . '" must have label');
+                }
+
+                if (!isset($formGroupDefinition['role']) || $app['security']->isGranted($formGroupDefinition)) {
+                    $needGroups[$formGroupName] = $formGroupDefinition;
+                }
+            } else {
+                $needGroups[$formGroupName] = array('label' => $formGroupDefinition);
+            }
+        }
+
+        $app['twig']->addGlobal('webface_need_groups', $needGroups);
+        $app['twig']->addGlobal('webface_fields_by_group', $groups);
+    }
+
     public function prepareData(Application $app, $fields, $data)
     {
         foreach ($fields as $fieldName => $field) {
@@ -216,7 +266,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function getForm(Application $app, $data = null)
     {
-        $fieldNames = $this->getFormFieldNames();
+        $fieldNames = $this->getFormFieldNames($app, $data);
         $fields = $this->describeFields($fieldNames);
 
         $data = $this->prepareData($app, $fields, $data);
@@ -271,8 +321,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         
         // if there is one group - push all fields to the root
         if (count($groups) > 1) {
-            $app['twig']->addGlobal('webface_need_groups', $this->getFormGroups());
-            $app['twig']->addGlobal('webface_fields_by_group', $groups);
+            $this->addGroupsViewData($app, $groups);
         }
 
         return $builder;
@@ -281,6 +330,8 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     public function addFieldToBuilder($field, FormBuilderInterface $builder, Application $app, $data = null)
     {
         $fieldName = $field['name'];
+        $fieldType = false;
+        $fieldOptions = array();
         if ($data && isset($data[$fieldName])) {
             $field['value'] = $data[$fieldName];
         }
@@ -289,10 +340,18 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         $config = array_merge(array('required' => true), $config);
         switch ($field['type']) {
             case 'text':
-                $builder->add($fieldName, 'text', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'text';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'textarea':
-                $builder->add($fieldName, 'textarea', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'textarea';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'html':
                 $globals = $app['twig']->getGlobals();
@@ -300,7 +359,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 $htmls[] = $fieldName;
                 $app['twig']->addGlobal('webface_htmls', $htmls);
                 $app['twig']->addGlobal('webface_need_html', true);
-                $builder->add($fieldName, 'tinymce_textarea', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'tinymce_textarea';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'slug':
                 $globals = $app['twig']->getGlobals();
@@ -314,17 +377,30 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 $this->addFieldToBuilder($field, $builder, $app, $data);
                 break;
             case 'password':
-                $builder->add($fieldName, 'password', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'password';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'integer':
-                $builder->add($fieldName, 'integer', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'integer';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'number':
-                $builder->add($fieldName, 'number', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'number';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'primary':
             case 'hidden':
-                $builder->add($fieldName, 'hidden');
+                $fieldType = 'hidden';
+                $fieldOptions = array();
                 break;
             case 'boolean':
                 if (isset($field['value'])) {
@@ -332,41 +408,48 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                     $currentData[$fieldName] = (bool) $field['value'];
                     $builder->setData($currentData);
                 }
-                $builder->add($fieldName, 'checkbox', array('label' => $field['label'], 'required' => $config['required']));
+                $fieldType = 'checkbox';
+                $fieldOptions = array(
+                    'label'    => $field['label'],
+                    'required' => $config['required'],
+                );
                 break;
             case 'file':
                 // add hidden field which then be overwritten by hardcoded select field
                 $builder->add('_' . $fieldName . '_action', 'hidden');
-                $builder->add($fieldName, 'file', array(
+                $fieldType = 'file';
+                $fieldOptions = array(
                     'label'    => $field['label'],
                     //'required'     => !empty($field['value']) ? false : $config['required'],
                     'required' => false,
-                ));
+                );
                 break;
             case 'image':
                 // add hidden field which then be overwritten by hardcoded select field
                 $builder->add('_' . $fieldName . '_action', 'hidden');
-                $builder->add($fieldName, 'editable_image', array(
+                $fieldType = 'editable_image';
+                $fieldOptions = array(
                     'label'        => $field['label'],
                     'required'     => !empty($field['value']) ? false : $config['required'],
                     'path'         => $app['webface.upload_url'] . '/' . $field['type'] . 's/' . $config['destination'] . '/',
                     'allow_delete' => !$config['required']
-                ));
+                );
                 break;
             case 'enum':
                 $expanded = count($config['options']) <= 3;
-                $builder->add($fieldName, 'choice', array(
+                $fieldType = 'choice';
+                $fieldOptions = array(
                     'label'       => $field['label'],
                     'choices'     => $config['options'],
                     'expanded'    => $expanded,
                     'required'    => $config['required'],
                     'empty_value' => isset($config['empty_value'])
-                                     ? $config['empty_value']
-                                     : ($config['required'] ? false : ''),
+                        ? $config['empty_value']
+                        : ($config['required'] ? false : ''),
                     'attr'        => array(
                         'class' => $expanded ? 'field-enum-expanded' : 'field-enum',
                     ),
-                ));
+                );
                 break;
             case 'relation':
                 switch ($config['relation_type']) {
@@ -404,7 +487,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                         if ($data && isset($data[$config['relation_field']])) {
                             $condition = " WHERE `{$config['relation_foreign_field']}` = {$data[$config['relation_field']]}";
 
-                            $query = "SELECT " . implode(', ', array_merge(array('id'), $relationController->getFormFieldNames()))
+                            $query = "SELECT " . implode(', ', array_merge(array('id'), $relationController->getFormFieldNames($app)))
                                 . " FROM {$relationController->getTable()}"
                                 . $condition;
                             $entities = $app['db']->fetchAll($query);
@@ -417,7 +500,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
                                 // dirty hack to prevent boolean exception
                                 $relationController = $field['config']['relation_controller'];
-                                $relationFields = $relationController->describeFields($relationController->getFormFieldNames());
+                                $relationFields = $relationController->describeFields($relationController->getFormFieldNames($app, $entities));
                                 foreach ($relationFields as $relationFieldName => $relationField) {
                                     if ($relationField['type'] === 'boolean') {
                                         foreach ($entities as &$entity) {
@@ -439,7 +522,8 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                         $app['twig']->addGlobal('webface_need_collections', true);
 
                         $formType = new EmbeddedHasManyFormType($app, $this, $fieldName, $field);
-                        $builder->add($fieldName, 'collection', array(
+                        $fieldType = 'collection';
+                        $fieldOptions = array(
                             'label' => $field['label'],
                             'attr' => array(
                                 'class' => 'collection',
@@ -448,7 +532,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                             'allow_add' => true,
                             'allow_delete' => true,
                             'by_reference' => false,
-                        ));
+                        );
                         break;
 
                     case 'has_many_and_belongs_to':
@@ -487,7 +571,8 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                             $builder->setData(array_merge($currentData, array($fieldName => $fieldData)));
                         }
 
-                        $builder->add($fieldName, 'grouped_choice', array(
+                        $fieldType = 'grouped_choice';
+                        $fieldOptions = array(
                             'label'    => $field['label'],
                             'choices'  => $options,
                             'expanded' => true,
@@ -496,15 +581,23 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                             'attr' => array(
                                 'class' => 'grouped-choice',
                             ),
-                        ));
+                        );
                         break;
                 }
 
                 break;
 
             default:
-                throw new FormException('Field "' . $fieldName . '" has unknown type "' . $field['type'] . '"');
+                throw new InvalidConfigurationException('Field "' . $fieldName . '" has unknown type "' . $field['type'] . '"');
                 break;
+        }
+
+        if (isset($config['field_type'])) {
+            $fieldType = $config['field_type'];
+        }
+
+        if ($fieldType) {
+            $builder->add($fieldName, $fieldType, $fieldOptions);
         }
     }
 
@@ -517,7 +610,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     public function prepareFormToStore($app, $form)
     {
         $data = $form->getData();
-        $fields = $this->describeFields($this->getFormFieldNames());
+        $fields = $this->describeFields($this->getFormFieldNames($app, $data));
         foreach ($data as $fieldName => $value) {
             if (!isset($fields[$fieldName])) {
                 continue;
@@ -582,6 +675,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     {
         $data = $form->getData();
         foreach ($hasManyFields as $fieldName => $field) {
+            if (!isset($data[$fieldName])) {
+                // there is nothing to save (possible, field was removed)
+                continue;
+            }
+
             $config = $field['config'];
             $relationController = $config['relation_controller'];
             $relationData = $data[$fieldName];
@@ -618,10 +716,14 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 continue;
             }
 
-            // удаляем существующие записи
+            if (!isset($data[$fieldName])) {
+                continue;
+            }
+
+            // delete all existent records
             $app['db']->delete($config['relation_map_table'], array($config['relation_map_field'] => $id));
 
-            // вставляем новые
+            // insert new ones
             $relationData = $data[$fieldName];
             foreach ($relationData as $relationRowData) {
                 $app['db']->insert($config['relation_map_table'], array(
@@ -634,8 +736,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function saveRelationFields($id, $app, $form)
     {
-        // ищем все has_many поля
-        $formFields = $this->describeFields($this->getFormFieldNames());
+        $formFields = $this->describeFields($this->getFormFieldNames($app, $form->getData()));
         $hasManyFields = array();
         $hasManyAndBelongsToFields = array();
         foreach ($formFields as $fieldName => $field) {
@@ -718,7 +819,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionList(Application $app, $page)
     {
-        $fieldNames = $this->getListFieldNames();
+        $fieldNames = $this->getListFieldNames($app);
         $fields = $this->describeFields($fieldNames);
 
         $filterWhereClause = $this->buildFilterQuery($app);
@@ -811,6 +912,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             'fields'     => $fields,
             'filter'     => $filter->createView(),
             'entities'   => $entities,
+            'actions'    => $this->getListActions($app),
             'paging'     => array(
                 'current_page' => $page,
                 'max_page'     => $maxPage,
@@ -836,7 +938,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     {
         $form = $this->getForm($app);
 
-        $form->bindRequest($app['request']);
+        $form->handleRequest($app['request']);
 
         if ($form->isValid()) {
             $data = $this->prepareFormToStore($app, $form);
@@ -905,7 +1007,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
             // OH GOD, symfony2 forms converts all values except NULL in true in checkboxes
             // so make them NULL
-            foreach ($this->describeFields($this->getListFieldNames()) as $fieldName => $field) {
+            foreach ($this->describeFields($this->getListFieldNames($app)) as $fieldName => $field) {
                 if (isset($field['config']['list_edit']) && $field['config']['list_edit']
                         && $field['type'] == 'boolean') {
                     $data[$fieldName] = $data[$fieldName] ? $data[$fieldName] : null;
@@ -923,7 +1025,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             return $app->json($result);
         }
 
-        $form->bindRequest($app['request']);
+        $form->handleRequest($app['request']);
 
         if ($form->isValid()) {
             $data = $this->prepareFormToStore($app, $form);

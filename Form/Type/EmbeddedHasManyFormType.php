@@ -26,7 +26,7 @@ class EmbeddedHasManyFormType extends AbstractType
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
         $relationController = $this->relationDefinition['config']['relation_controller'];
-        $fieldNames = $relationController->getFormFieldNames();
+        $fieldNames = $relationController->getFormFieldNames($this->app);
 
         if ($this->removeParentReference) {
             $relationForeignField = $this->relationDefinition['config']['relation_foreign_field'];

@@ -2,8 +2,17 @@
 
 {% block content %}
     <div class="span9 content-list content-list-{{ table }}">
-        <h2>{{ webface_current_table_label }} (<a href="{{ path(table ~ '_new') }}">Добавить</a>)</h2>
+        {% spaceless %}
+            <h2>
+                {{ webface_current_table_label }}
+                {% if actions._add is defined %}
+                    <a href="{{ path(table ~ '_new') }}" class="btn btn-success"><i class="icon-plus icon-white"></i></a>
+                {% endif %}
+            </h2>
+        {% endspaceless %}
+
         {% include 'partials/flash.twig' %}
+
         <table {{ webface_need_list_inline_edit is defined ? 'id="list-inline-edit"' : '' }} class="table table-striped  table-bordered">
             <thead>
             <tr>
@@ -24,8 +33,8 @@
                         {% endif %}
                     {% endfor %}
                     <td>
-                        <a href="{{ path(table ~ '_list') }}" id="filter-apply">Применить</a>
-                        <a href="{{ path(table ~ '_list') }}" id="filter-clear">Сбросить</a>
+                        <a href="{{ path(table ~ '_list') }}" id="filter-apply" class="btn"><i class="icon-filter"></i></a>
+                        <a href="{{ path(table ~ '_list') }}" id="filter-clear" class="btn"><i class="icon-ban-circle"></i></a>
                     </td>
                 </tr>
             {% endif %}
@@ -43,9 +52,9 @@
                     <td>
                         {% for actionUrl, actionName in entity.actions %}
                             {% if actionUrl == '_edit' %}
-                                <a href="{{ path(table ~ '_edit', { id: entity.id }) }}" class="link-edit">{{ actionName }}</a>
+                                <a href="{{ path(table ~ '_edit', { id: entity.id }) }}" class="btn link-edit"><i class="icon-pencil"></i></a>
                             {% elseif actionUrl == '_delete' %}
-                                <a href="{{ path(table ~ '_delete', { id: entity.id }) }}" onclick="if (confirm('Действительно удалить запись?')) { $.post($(this).attr('href'), function() { location.reload(); }); } return false;">{{ actionName }}</a>
+                                <a href="{{ path(table ~ '_delete', { id: entity.id }) }}" class="btn" onclick="if (confirm('Действительно удалить запись?')) { $.post($(this).attr('href'), function() { location.reload(); }); } return false;"><i class="icon-remove"></i></a>
                             {% else %}
                                 <a href="{{ actionUrl }}">{{ actionName }}</a>
                             {% endif %}
@@ -58,6 +67,8 @@
 
         {% include 'partials/pagination.twig' with paging %}
 
-        <a href="{{ path(table ~ '_new') }}">Добавить</a>
+        {% if actions._add is defined %}
+            <a href="{{ path(table ~ '_new') }}" class="btn btn-success"><i class="icon-plus icon-white"></i> Добавить</a>
+        {% endif %}
     </div><!--.span9-->
 {% endblock %}

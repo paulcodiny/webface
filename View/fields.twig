@@ -50,10 +50,10 @@
             {% endif %}
 
             {% for child in form %}
-                {% if child.getVar('label') is empty %}
+                {% if child.vars.label is empty %}
                     {% set label = name|humanize %}
                 {% else %}
-                    {% set label = child.getVar('label') %}
+                    {% set label = child.vars.label %}
                 {% endif %}
                 <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
                     {{ form_widget(child) }}
@@ -85,11 +85,11 @@
                     <div class="grouped-choice-nested">
                         {% for nested_choice in choice %}
                             {% for child in form %}
-                                {% if child.getVar('value') == nested_choice.value %}
-                                    {% if child.getVar('label') is empty %}
+                                {% if nested_choice.value is defined and child.vars.value == nested_choice.value %}
+                                    {% if child.vars.label is empty %}
                                         {% set label = name|humanize %}
                                     {% else %}
-                                        {% set label = child.getVar('label') %}
+                                        {% set label = child.vars.label %}
                                     {% endif %}
                                     <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
                                     {{ form_widget(child) }}
@@ -103,10 +103,10 @@
                 {% endfor %}
             {% else %}
                 {% for child in form %}
-                    {% if child.getVar('label') is empty %}
+                    {% if child.vars.label is empty %}
                         {% set label = name|humanize %}
                     {% else %}
-                        {% set label = child.getVar('label') %}
+                        {% set label = child.vars.label %}
                     {% endif %}
                     <label{% for attrname, attrvalue in label_attr %} {{ attrname }}="{{ attrvalue }}"{% endfor %}>
                         {{ form_widget(child) }}

@@ -1,9 +1,9 @@
 {% if webface_need_groups is defined %}
     {% spaceless %}
-        <div id="{{ form.vars().id }}" class="entity-with-groups">
+        <div id="{{ form.vars.id }}" class="entity-with-groups">
             <ul class="nav nav-tabs">
-                {% for group, group_label in webface_need_groups %}
-                    <li class="{{ loop.first ? 'active' : '' }}"><a href="#{{ group }}" data-toggle="tab">{{ group_label }}</a></li>
+                {% for group_name, group_definition in webface_need_groups %}
+                    <li class="{{ loop.first ? 'active' : '' }}"><a href="#{{ group_name }}" data-toggle="tab">{{ group_definition.label }}</a></li>
                 {% endfor %}
             </ul>
             {{ form_errors(form) }}

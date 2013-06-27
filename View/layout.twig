@@ -36,7 +36,10 @@
             <a class="brand" href="/webface">Виртуальная витрина | WebFace Администрирование</a>
             <div class="nav-collapse collapse">
                 <p class="navbar-text pull-right">
-                    <a href="#" class="navbar-link">admin</a>
+                    {% if webface_username is defined %}
+                        <i class="icon-user icon-white"></i>&nbsp;<span class="navbar-link">{{ webface_username }}</span> |
+                    {% endif %}
+                    <a href="{{ path('webface_user_logout') }}" class="navbar-link">выйти</a>
                 </p>
             </div><!-- .nav-collapse -->
         </div>
@@ -52,10 +55,20 @@
                 <div class="well sidebar-nav">
                     <ul class="nav nav-list">
                         {% for group, pages in webface_navigation %}
-                            <li class="nav-header">{{ group }}</li>
-                            {% for page in pages %}
-                                <li {{ page.active is defined ? 'class="active"' : '' }}><a href="{{ path(page.table ~ '_list') }}">{{ page.label }}</a></li>
-                            {% endfor %}
+                            {% if webface_groups_role[group] is not defined or is_granted(webface_groups_role[group]) %}
+                                {% set show_group = true %}
+                            {% else %}
+                                {% set show_group = false %}
+                            {% endif %}
+
+                            {% if show_group %}
+                                <li class="nav-header">{{ group }}</li>
+                                {% for page in pages %}
+                                    {% if page.role is not defined or is_granted(page.role) %}
+                                        <li {{ page.active is defined ? 'class="active"' : '' }}><a href="{{ path(page.table ~ '_list') }}">{{ page.label }}</a></li>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
                         {% endfor %}
                     </ul>
                 </div><!--/.well -->
