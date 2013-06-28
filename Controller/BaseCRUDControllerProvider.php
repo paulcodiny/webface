@@ -3,6 +3,7 @@
 namespace WebFace\Controller;
 
 use Silex\ControllerCollection;
+use Symfony\Component\Form\Form;
 use WebFace\Form\Type\EmbeddedHasManyFormType;
 
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -604,10 +605,10 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     /**
      * @todo Переделать на событие формы preBind
      * @param $app
-     * @param $form
+     * @param Form $form
      * @return mixed
      */
-    public function prepareFormToStore($app, $form)
+    public function prepareFormToStore($app, Form $form)
     {
         $data = $form->getData();
         $fields = $this->describeFields($this->getFormFieldNames($app, $data));
@@ -671,7 +672,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return $data;
     }
 
-    public function saveHasManyFields($hasManyFields, $id, $app, $form)
+    public function saveHasManyFields($hasManyFields, $id, $app, Form $form)
     {
         $data = $form->getData();
         foreach ($hasManyFields as $fieldName => $field) {
@@ -686,10 +687,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             $formType = new EmbeddedHasManyFormType($app, $this, $fieldName, $field, false);
             foreach ($relationData as $relationRowData) {
                 $relationRowData[$config['relation_foreign_field']] = $id;
+                /** @var Form $form */
                 $form = $app['form.factory']
                     ->createBuilder($formType, null, array('csrf_protection' => false))
                     ->getForm()
-                    ->bind($relationRowData);
+                    ->submit($relationRowData);
                 if ($form->isValid()) {
                     $relationValidData = $relationController->prepareFormToStore($app, $form);
                     if (isset($relationValidData['id'])) {
@@ -704,7 +706,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         }
     }
 
-    public function saveHasManyAndBelongsToFields($hasManyAndBelongsToFields, $id, $app, $form)
+    public function saveHasManyAndBelongsToFields($hasManyAndBelongsToFields, $id, $app, Form $form)
     {
         $data = $form->getData();
         foreach ($hasManyAndBelongsToFields as $fieldName => $field) {
@@ -734,7 +736,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         }
     }
 
-    public function saveRelationFields($id, $app, $form)
+    public function saveRelationFields($id, $app, Form $form)
     {
         $formFields = $this->describeFields($this->getFormFieldNames($app, $form->getData()));
         $hasManyFields = array();
@@ -1014,7 +1016,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 }
             }
 
-            $form->bind($data);
+            $form->submit($data);
             if ($form->isValid()) {
                 $app['db']->update($this->table, $this->prepareFormToStore($app, $form), array('id' => $id));
                 $result = $success;
