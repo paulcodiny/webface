@@ -168,13 +168,20 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return array('_edit' => 'Редактировать', '_delete' => 'Удалить');
     }
 
-    public function getListActions($app)
+    /**
+     * Actions available in list page
+     * @param Application $app
+     * @return array
+     */
+    public function getListActions(Application $app)
     {
         return array('_add' => 'Добавить');
     }
 
     /**
      * Строка с тем, как сортировать данные в списке
+     * String with order to list
+     * @example id DESC, position ASC
      * @return string
      */
     public function getListOrder()
@@ -182,9 +189,40 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return 'id DESC';
     }
 
+    /**
+     * Number of entities displaying by page
+     * @return int
+     */
     public function getListPerPageCount()
     {
         return 20;
+    }
+
+    /**
+     * Callback called after entity created
+     * @param Application $app
+     * @param int         $entityId
+     * @param array       $data
+     */
+    public function afterCreated(Application $app, $entityId, $data)
+    {
+
+    }
+
+    /**
+     * Callback called after entity updated (not created)
+     * @param Application $app
+     * @param array       $oldData Whole object data, including `id`
+     * @param array       $newData Only data which can be updated (list of fields from getFormFieldNames)
+     */
+    public function afterUpdated(Application $app, $oldData, $newData)
+    {
+
+    }
+
+    public function afterDeleted(Application $app, $data)
+    {
+
     }
 
     public function describeFields(array $fields)
@@ -265,6 +303,12 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return $data;
     }
 
+    /**
+     * @param Application $app
+     * @param null        $data
+     *
+     * @return Form
+     */
     public function getForm(Application $app, $data = null)
     {
         $fieldNames = $this->getFormFieldNames($app, $data);
@@ -285,7 +329,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
      *
      * @return FormBuilderInterface
      */
-    public function addFieldsToBuilder($fields, FormBuilderInterface $builder, $app, $data = null)
+    public function addFieldsToBuilder($fields, FormBuilderInterface $builder, Application $app, $data = null)
     {
         // check groups
         $defaultGroup = 'default';
@@ -437,18 +481,17 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 );
                 break;
             case 'enum':
-                $expanded = count($config['options']) <= 3;
                 $fieldType = 'choice';
                 $fieldOptions = array(
                     'label'       => $field['label'],
                     'choices'     => $config['options'],
-                    'expanded'    => $expanded,
+                    'expanded'    => false,
                     'required'    => $config['required'],
                     'empty_value' => isset($config['empty_value'])
                         ? $config['empty_value']
                         : ($config['required'] ? false : ''),
                     'attr'        => array(
-                        'class' => $expanded ? 'field-enum-expanded' : 'field-enum',
+                        'class' => 'field-enum',
                     ),
                 );
                 break;
@@ -604,11 +647,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     /**
      * @todo Переделать на событие формы preBind
-     * @param $app
-     * @param Form $form
+     * @param Application $app
+     * @param Form        $form
      * @return mixed
      */
-    public function prepareFormToStore($app, Form $form)
+    public function prepareFormToStore(Application $app, Form $form)
     {
         $data = $form->getData();
         $fields = $this->describeFields($this->getFormFieldNames($app, $data));
@@ -672,7 +715,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return $data;
     }
 
-    public function saveHasManyFields($hasManyFields, $id, $app, Form $form)
+    public function saveHasManyFields($hasManyFields, $id, Application $app, Form $form)
     {
         $data = $form->getData();
         foreach ($hasManyFields as $fieldName => $field) {
@@ -736,7 +779,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         }
     }
 
-    public function saveRelationFields($id, $app, Form $form)
+    public function saveRelationFields($id, Application $app, Form $form)
     {
         $formFields = $this->describeFields($this->getFormFieldNames($app, $form->getData()));
         $hasManyFields = array();
@@ -812,11 +855,35 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return implode('&', $filterGetQuery);
     }
 
-    public function getEntity(Application $app, $table, $id)
+    /**
+     * @param Application $app
+     * @param             $id
+     *
+     * @return mixed
+     */
+    public function getEntity(Application $app, $id)
     {
-        $query = "SELECT * FROM `{$table}` WHERE id = ?";
+        $query = "SELECT * FROM `{$this->table}` WHERE id = ?";
 
         return $app['db']->fetchAssoc($query, array($id));
+    }
+
+    /**
+     * @param Application $app
+     * @param string      $where
+     * @param string      $orderBy
+     * @param string      $offset
+     * @param string      $limit
+     *
+     * @return array
+     */
+    public function getEntitiesList(Application $app, $where, $orderBy, $offset, $limit)
+    {
+        $query = "SELECT * FROM `{$this->table}` {$where} {$orderBy} LIMIT {$offset}, {$limit}";
+
+        $entities = $app['db']->fetchAll($query);
+
+        return $entities;
     }
 
     public function actionList(Application $app, $page)
@@ -844,9 +911,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         $offset = ($page - 1) * $perPage;
 
-        $query = "SELECT * FROM `{$this->table}` {$where} {$orderBy} LIMIT {$offset}, {$perPage}";
-
-        $entities = $app['db']->fetchAll($query);
+        $entities = $this->getEntitiesList($app, $where, $orderBy, $offset, $perPage);
 
         $renderedFields = array();
 
@@ -946,8 +1011,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             $data = $this->prepareFormToStore($app, $form);
 
             $app['db']->insert($this->table, $data);
+            $entityId = $app['db']->lastInsertId();
 
-            $this->saveRelationFields($app['db']->lastInsertId(), $app, $form);
+            $this->saveRelationFields($entityId, $app, $form);
+
+            $this->afterCreated($app, $entityId, $data);
 
             $app['session']->set($this->flashName, array(
                 'type' => 'success',
@@ -976,7 +1044,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionEdit(Application $app, $id)
     {
-        $entity = $this->getEntity($app, $this->table, $id);
+        $entity = $this->getEntity($app, $id);
 
         $form = $this->getForm($app, $entity);
 
@@ -989,9 +1057,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionUpdate(Application $app, $id)
     {
-        $entity = $this->getEntity($app, $this->table, $id);
+        $entity = $this->getEntity($app, $id);
 
-        $form = $this->getForm($app);
+        $form = $this->getForm($app, $entity);
 
         $success = array(
             'type' => 'success',
@@ -1003,7 +1071,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             'text' => 'Внимание, возникли какие-то ошибки!',
         );
 
-        // Обработка AJAX-редактирования
+        // Processing AJAX-editing
         if ($app['request']->isXmlHttpRequest()) {
             $data = array_merge($entity, $app['request']->get('entity'));
 
@@ -1019,6 +1087,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             $form->submit($data);
             if ($form->isValid()) {
                 $app['db']->update($this->table, $this->prepareFormToStore($app, $form), array('id' => $id));
+                $this->afterUpdated($app, $entity, $data);
                 $result = $success;
             } else{
                 $result = $error;
@@ -1031,10 +1100,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         if ($form->isValid()) {
             $data = $this->prepareFormToStore($app, $form);
-
             $app['db']->update($this->table, $data, array('id' => $id));
-
             $this->saveRelationFields($id, $app, $form);
+            $this->afterUpdated($app, $entity, $data);
 
             $app['session']->set($this->flashName, $success);
 
@@ -1059,9 +1127,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionDelete(Application $app, $id)
     {
+        $entity = $this->getEntity($app, $id);
         $app['db']->delete($this->table, array('id' => $id));
+        $this->afterDeleted($app, $entity);
 
-        // @todo сообщение на удаление
+        // @todo Flashes about deleting are not displayed, fix it
         $app['session']->set($this->flashName, array(
             'type' => 'success',
             'text' => 'Запись успешно удалена!',
