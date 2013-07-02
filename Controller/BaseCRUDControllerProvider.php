@@ -163,7 +163,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return array('default' => 'Основное');
     }
 
-    public function getEntityActions($app, $entity)
+    public function getEntityActions(Application $app, $entity)
     {
         return array('_edit' => 'Редактировать', '_delete' => 'Удалить');
     }
@@ -381,7 +381,10 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             $field['value'] = $data[$fieldName];
         }
 
-        $config = isset($field['config']) ? $field['config'] : array();
+        if (!isset($field['config'])) {
+            $field['config'] = array();
+        }
+        $config = &$field['config'];
         $config = array_merge(array('required' => true), $config);
         switch ($field['type']) {
             case 'text':
@@ -396,6 +399,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 $fieldOptions = array(
                     'label'    => $field['label'],
                     'required' => $config['required'],
+                    'attr'     => array(
+                        'class' => 'input-xlarge',
+                    ),
                 );
                 break;
             case 'html':
@@ -526,8 +532,16 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                         break;
 
                     case 'has_many':
-                        // @todo relation_condition?
+                        /** @var BaseCRUDControllerProvider $relationController */
                         $relationController = $config['relation_controller'];
+                        if (!isset($config['relation_field'])) {
+                            $config['relation_field'] = 'id';
+                        }
+                        if (!isset($config['relation_foreign_field'])) {
+                            $config['relation_foreign_field'] = $relationController->getReferenceField($app, $this->getTable());
+                        }
+
+                        // @todo relation_condition?
                         if ($data && isset($data[$config['relation_field']])) {
                             $condition = " WHERE `{$config['relation_foreign_field']}` = {$data[$config['relation_field']]}";
 
@@ -724,8 +738,15 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 continue;
             }
 
-            $config = $field['config'];
+            $config = &$field['config'];
+            /** @var BaseCRUDControllerProvider $relationController */
             $relationController = $config['relation_controller'];
+            if (!isset($config['relation_field'])) {
+                $config['relation_field'] = 'id';
+            }
+            if (!isset($config['relation_foreign_field'])) {
+                $config['relation_foreign_field'] = $relationController->getReferenceField($app, $this->getTable());
+            }
             $relationData = $data[$fieldName];
             $formType = new EmbeddedHasManyFormType($app, $this, $fieldName, $field, false);
             foreach ($relationData as $relationRowData) {
@@ -802,6 +823,18 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             $this->saveHasManyAndBelongsToFields($hasManyAndBelongsToFields, $id, $app, $form);
         }
     }
+
+    public function getReferenceField(Application $app, $table)
+    {
+        foreach ($this->getFields() as $fieldName => $field) {
+            if ($field['type'] === 'relation'
+                    && $field['config']['relation_type'] === 'belongs_to'
+                    && $field['config']['relation_table'] === $table) {
+                return $fieldName;
+            }
+        }
+    }
+
 
     public function getFilter(Application $app)
     {
