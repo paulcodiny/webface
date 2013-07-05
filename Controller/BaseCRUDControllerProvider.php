@@ -24,6 +24,15 @@ use LogicException;
  */
 class BaseCRUDControllerProvider implements ControllerProviderInterface
 {
+
+    const ENTITY_ID_TYPE_SCALAR = 'entity_id_type_scalar';
+    const ENTITY_ID_TYPE_ASSOC  = 'entity_id_type_accos';
+    const ENTITY_ID_TYPE_ARRAY  = 'entity_id_type_array';
+
+    /**
+     * Caches method getTable, only read
+     * @var null|string
+     */
     protected $table = null;
     protected $flashName = 'wf_flash';
 
@@ -904,6 +913,26 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     }
 
     /**
+     * @param array $entity
+     * @param string $type ENTITY_ID_TYPE_* const
+     *
+     * @return array
+     */
+    public function getEntityId($entity, $type = self::ENTITY_ID_TYPE_ASSOC)
+    {
+        switch ($type) {
+            case self::ENTITY_ID_TYPE_ASSOC:
+                return array('id' => $entity['id']);
+
+            case self::ENTITY_ID_TYPE_SCALAR:
+                return $entity['id'];
+
+            case self::ENTITY_ID_TYPE_ARRAY:
+                return array($entity['id']);
+        }
+    }
+
+    /**
      * @param Application $app
      * @param string      $where
      * @param string      $orderBy
@@ -930,7 +959,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         $where = $filterWhereClause ? 'WHERE ' . $filterWhereClause : '';
         $orderBy = 'ORDER BY ' . $this->getListOrder();
 
-        $queryCount = "SELECT COUNT(id) AS `count` FROM `{$this->table}` {$where};";
+        $queryCount = "SELECT COUNT(*) AS `count` FROM `{$this->table}` {$where};";
         $count = $app['db']->fetchAssoc($queryCount);
         $count = $count['count'];
 
@@ -993,7 +1022,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
                     foreach ($entities as $k => $entity) {
                         $relationEntity = $app['db']->fetchAssoc($query, array($entity[$fieldName]));
-                        $entities[$k][$fieldName] = $relationEntity[$config['relation_display']];
+                        $entities[$k]['relation:belongs_to:display:' . $fieldName] = $relationEntity[$config['relation_display']];
                     }
                 }
             }
@@ -1108,34 +1137,16 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         // Processing AJAX-editing
         if ($app['request']->isXmlHttpRequest()) {
-            $data = array_merge($entity, $app['request']->get('entity'));
+            $result = $this->ajaxUpdate($app, $entity, $form);
 
-            // OH GOD, symfony2 forms converts all values except NULL in true in checkboxes
-            // so make them NULL
-            foreach ($this->describeFields($app, $this->getListFieldNames($app)) as $fieldName => $field) {
-                if (isset($field['config']['list_edit']) && $field['config']['list_edit']
-                        && $field['type'] == 'boolean') {
-                    $data[$fieldName] = $data[$fieldName] ? $data[$fieldName] : null;
-                }
-            }
-
-            $form->submit($data);
-            if ($form->isValid()) {
-                $app['db']->update($this->table, $this->prepareFormToStore($app, $form), array('id' => $id));
-                $this->afterUpdated($app, $entity, $data);
-                $result = $success;
-            } else{
-                $result = $error;
-            }
-
-            return $app->json($result);
+            return $app->json($result ? $success : $error);
         }
 
         $form->handleRequest($app['request']);
 
         if ($form->isValid()) {
             $data = $this->prepareFormToStore($app, $form);
-            $app['db']->update($this->table, $data, array('id' => $id));
+            $app['db']->update($this->table, $data, $this->getEntityId($entity));
             $this->saveRelationFields($id, $app, $form);
             $this->afterUpdated($app, $entity, $data);
 
@@ -1160,10 +1171,35 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         ));
     }
 
+    public function ajaxUpdate(Application $app, $entity, Form $form)
+    {
+        $data = array_merge($entity, $app['request']->get('entity'));
+
+        // OH GOD, symfony2 forms converts all values except NULL in true in checkboxes
+        // so make them NULL
+        foreach ($this->describeFields($app, $this->getListFieldNames($app)) as $fieldName => $field) {
+            if (isset($field['config']['list_edit']) && $field['config']['list_edit']
+                && $field['type'] == 'boolean') {
+                $data[$fieldName] = $data[$fieldName] ? $data[$fieldName] : null;
+            }
+        }
+
+        $form->submit($data);
+        if ($form->isValid()) {
+            $app['db']->update($this->table, $this->prepareFormToStore($app, $form), array('id' => $id));
+            $this->afterUpdated($app, $entity, $data);
+            $result = true;
+        } else {
+            $result = false;
+        }
+
+        return $result;
+    }
+
     public function actionDelete(Application $app, $id)
     {
         $entity = $this->getEntity($app, $id);
-        $app['db']->delete($this->table, array('id' => $id));
+        $app['db']->delete($this->table, $this->getEntityId($entity));
         $this->afterDeleted($app, $entity);
 
         // @todo Flashes about deleting are not displayed, fix it

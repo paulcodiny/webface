@@ -44,6 +44,8 @@
                         <td class="list-entity-{{ name }}">
                             {% if field.config.list_edit is defined and entity.list_edit_form[name] is defined %}
                                 {{ form_widget(entity.list_edit_form[name]) }}
+                            {% elseif entity['relation:belongs_to:display:' ~ name] is defined %}
+                                {{ entity['relation:belongs_to:display:' ~ name]|raw }}
                             {% else %}
                                 {{ entity[name]|raw }}
                             {% endif %}
