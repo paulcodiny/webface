@@ -119,9 +119,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     }
 
     /**
+     * @param Application $app
+     *
      * @return array
      */
-    public function getFields()
+    public function getFields(Application $app)
     {
         return array();
     }
@@ -225,9 +227,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     }
 
-    public function describeFields(array $fields)
+    public function describeFields(Application $app, array $fields)
     {
-        $allFields = $this->getFields();
+        $allFields = $this->getFields($app);
         $describedFields = array();
         foreach ($fields as $field) {
             if (!isset($allFields[$field])) {
@@ -312,7 +314,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     public function getForm(Application $app, $data = null)
     {
         $fieldNames = $this->getFormFieldNames($app, $data);
-        $fields = $this->describeFields($fieldNames);
+        $fields = $this->describeFields($app, $fieldNames);
 
         $data = $this->prepareData($app, $fields, $data);
 
@@ -558,7 +560,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
                                 // dirty hack to prevent boolean exception
                                 $relationController = $field['config']['relation_controller'];
-                                $relationFields = $relationController->describeFields($relationController->getFormFieldNames($app, $entities));
+                                $relationFields = $relationController->describeFields($app, $relationController->getFormFieldNames($app, $entities));
                                 foreach ($relationFields as $relationFieldName => $relationField) {
                                     if ($relationField['type'] === 'boolean') {
                                         foreach ($entities as &$entity) {
@@ -668,7 +670,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     public function prepareFormToStore(Application $app, Form $form)
     {
         $data = $form->getData();
-        $fields = $this->describeFields($this->getFormFieldNames($app, $data));
+        $fields = $this->describeFields($app, $this->getFormFieldNames($app, $data));
         foreach ($data as $fieldName => $value) {
             if (!isset($fields[$fieldName])) {
                 continue;
@@ -802,7 +804,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function saveRelationFields($id, Application $app, Form $form)
     {
-        $formFields = $this->describeFields($this->getFormFieldNames($app, $form->getData()));
+        $formFields = $this->describeFields($app, $this->getFormFieldNames($app, $form->getData()));
         $hasManyFields = array();
         $hasManyAndBelongsToFields = array();
         foreach ($formFields as $fieldName => $field) {
@@ -826,7 +828,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function getReferenceField(Application $app, $table)
     {
-        foreach ($this->getFields() as $fieldName => $field) {
+        foreach ($this->getFields($app) as $fieldName => $field) {
             if ($field['type'] === 'relation'
                     && $field['config']['relation_type'] === 'belongs_to'
                     && $field['config']['relation_table'] === $table) {
@@ -842,7 +844,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         $builder = $app['form.factory']->createNamedBuilder('filter', 'form', $data, array('csrf_protection' => false));
 
         $fieldNames = $this->getFilterFieldNames();
-        $fields = $this->describeFields($fieldNames);
+        $fields = $this->describeFields($app, $fieldNames);
         foreach ($fields as &$field) {
             $field['config']['required'] = false;
         }
@@ -922,7 +924,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     public function actionList(Application $app, $page)
     {
         $fieldNames = $this->getListFieldNames($app);
-        $fields = $this->describeFields($fieldNames);
+        $fields = $this->describeFields($app, $fieldNames);
 
         $filterWhereClause = $this->buildFilterQuery($app);
         $where = $filterWhereClause ? 'WHERE ' . $filterWhereClause : '';
@@ -1110,7 +1112,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
             // OH GOD, symfony2 forms converts all values except NULL in true in checkboxes
             // so make them NULL
-            foreach ($this->describeFields($this->getListFieldNames($app)) as $fieldName => $field) {
+            foreach ($this->describeFields($app, $this->getListFieldNames($app)) as $fieldName => $field) {
                 if (isset($field['config']['list_edit']) && $field['config']['list_edit']
                         && $field['type'] == 'boolean') {
                     $data[$fieldName] = $data[$fieldName] ? $data[$fieldName] : null;
