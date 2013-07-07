@@ -42,7 +42,7 @@ class EmbeddedHasManyFormType extends AbstractType
             ),
         ));
 
-        $fields = $relationController->describeFields($fieldNames);
+        $fields = $relationController->describeFields($this->app, $fieldNames);
         $relationController->addFieldsToBuilder($fields, $builder, $this->app);
     }
 
