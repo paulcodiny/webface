@@ -811,27 +811,91 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         }
     }
 
-    public function saveRelationFields($id, Application $app, Form $form)
+    public function getHasManyFields($app)
     {
-        $formFields = $this->describeFields($app, $this->getFormFieldNames($app, $form->getData()));
         $hasManyFields = array();
-        $hasManyAndBelongsToFields = array();
-        foreach ($formFields as $fieldName => $field) {
+        $fields = $this->getFields($app);
+        foreach ($fields as $fieldName => $field) {
             if ($field['type'] == 'relation' && $field['config']['relation_type'] == 'has_many') {
                 $hasManyFields[$fieldName] = $field;
             }
+        }
 
+        return $hasManyFields;
+    }
+
+    public function getBelongsToFields($app)
+    {
+        $belongsToFields = array();
+        $fields = $this->getFields($app);
+        foreach ($fields as $fieldName => $field) {
+            if ($field['type'] == 'relation' && $field['config']['relation_type'] == 'belongs_to') {
+                $belongsToFields[$fieldName] = $field;
+            }
+        }
+
+        return $belongsToFields;
+    }
+
+    public function getHasManyAndBelongsToFields($app)
+    {
+        $hasManyAndBelongsToFields = array();
+        $fields = $this->getFields($app);
+        foreach ($fields as $fieldName => $field) {
             if ($field['type'] == 'relation' && $field['config']['relation_type'] == 'has_many_and_belongs_to') {
                 $hasManyAndBelongsToFields[$fieldName] = $field;
             }
         }
 
+        return $hasManyAndBelongsToFields;
+    }
+
+    public function saveRelationFields($id, Application $app, Form $form)
+    {
+        $hasManyFields = $this->getHasManyFields($app);
         if (count($hasManyFields) > 0) {
             $this->saveHasManyFields($hasManyFields, $id, $app, $form);
         }
 
+        $hasManyAndBelongsToFields = $this->getHasManyAndBelongsToFields($app);
         if (count($hasManyAndBelongsToFields) > 0) {
             $this->saveHasManyAndBelongsToFields($hasManyAndBelongsToFields, $id, $app, $form);
+        }
+    }
+
+    public function deleteRelationEntities(Application $app, $entity)
+    {
+        $hasManyAndBelongsToFields = $this->getHasManyAndBelongsToFields($app);
+        foreach ($hasManyAndBelongsToFields as $fieldName => $field) {
+            if (isset($field['config']['relation_on_delete'])) {
+                if ($field['config']['relation_on_delete'] == 'delete') {
+                    $query = "DELETE FROM `" . $field['config']['relation_map_table'] . "`
+                        WHERE `" . $field['config']['relation_map_field'] . "` = ?";
+                    $app['db']->exec($query, array($entity[$field['config']['relation_field']]));
+                } elseif ($field['config']['relation_on_delete'] == 'set_null') {
+
+                }
+            }
+        }
+
+        $hasMany = $this->getHasManyFields($app);
+        foreach ($hasMany as $fieldName => $field) {
+            if (isset($field['config']['relation_on_delete'])) {
+                if ($field['config']['relation_on_delete'] == 'delete') {
+                    $relationController = $field['config']['relation_controller'];
+                    if (!isset($config['relation_field'])) {
+                        $config['relation_field'] = 'id';
+                    }
+                    if (!isset($config['relation_foreign_field'])) {
+                        $config['relation_foreign_field'] = $relationController->getReferenceField($app, $this->getTable());
+                    }
+
+                    $app['db']->delete($relationController->getTable(), array($config['relation_foreign_field'] => $entity[$config['relation_field']]));
+
+                } elseif ($field['config']['relation_on_delete'] == 'set_null') {
+
+                }
+            }
         }
     }
 
@@ -1200,6 +1264,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     {
         $entity = $this->getEntity($app, $id);
         $app['db']->delete($this->table, $this->getEntityId($entity));
+        $this->deleteRelationEntities($app, $entity);
         $this->afterDeleted($app, $entity);
 
         // @todo Flashes about deleting are not displayed, fix it
