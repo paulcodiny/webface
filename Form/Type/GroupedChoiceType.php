@@ -10,6 +10,7 @@ class GroupedChoiceType extends ChoiceType
 {
     public function buildView(FormView $view, FormInterface $form, array $options)
     {
+        $view->vars['has_groups'] = false;
         foreach ($options['choice_list']->getRemainingViews() as $index => $choice) {
             $view->vars['has_groups'] = is_array($choice);
 

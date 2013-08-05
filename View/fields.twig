@@ -26,11 +26,23 @@
                 </li>
             </ul>
         {% else %}
-            {% set type = type|default('text') %}
-            <input type="{{ type }}" {{ block('widget_attributes') }} {% if value is not empty %}value="{{ value }}" {% endif %}/>
+            {{ block('form_widget') }}
         {% endif %}
     {% endspaceless %}
 {% endblock editable_image_widget %}
+
+{% block file_widget %}
+    {% if form.vars.data is not null %}
+        {% set value = form.vars.data %}
+    {% endif %}
+    {% spaceless %}
+        {% if value %}
+            <a href="{{ value }}" target="_blank">{{ value }}</a><br />
+        {% endif %}
+
+        {{ block('form_widget') }}
+    {% endspaceless %}
+{% endblock file_widget %}
 
 {% block tinymce_textarea_widget %}
     {% spaceless %}

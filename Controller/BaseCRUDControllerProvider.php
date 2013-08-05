@@ -484,6 +484,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                     'label'    => $field['label'],
                     //'required'     => !empty($field['value']) ? false : $config['required'],
                     'required' => false,
+                    'data_class' => null,
                 );
                 break;
             case 'image':
@@ -869,9 +870,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         foreach ($hasManyAndBelongsToFields as $fieldName => $field) {
             if (isset($field['config']['relation_on_delete'])) {
                 if ($field['config']['relation_on_delete'] == 'delete') {
-                    $query = "DELETE FROM `" . $field['config']['relation_map_table'] . "`
-                        WHERE `" . $field['config']['relation_map_field'] . "` = ?";
-                    $app['db']->exec($query, array($entity[$field['config']['relation_field']]));
+                    $app['db']->delete($field['config']['relation_map_table'], array(
+                        $field['config']['relation_map_field'] => $entity[$field['config']['relation_field']]
+                    ));
                 } elseif ($field['config']['relation_on_delete'] == 'set_null') {
 
                 }
@@ -1250,7 +1251,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         $form->submit($data);
         if ($form->isValid()) {
-            $app['db']->update($this->table, $this->prepareFormToStore($app, $form), array('id' => $id));
+            $app['db']->update($this->table, $this->prepareFormToStore($app, $form), $this->getEntityId($entity));
             $this->afterUpdated($app, $entity, $data);
             $result = true;
         } else {
