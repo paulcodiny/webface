@@ -4,6 +4,7 @@ namespace WebFace\Controller;
 
 use Silex\ControllerCollection;
 use Symfony\Component\Form\Form;
+use WebFace\Entity\EntityManager;
 use WebFace\Form\Type\EmbeddedHasManyFormType;
 
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -24,11 +25,6 @@ use LogicException;
  */
 class BaseCRUDControllerProvider implements ControllerProviderInterface
 {
-
-    const ENTITY_ID_TYPE_SCALAR = 'entity_id_type_scalar';
-    const ENTITY_ID_TYPE_ASSOC  = 'entity_id_type_accos';
-    const ENTITY_ID_TYPE_ARRAY  = 'entity_id_type_array';
-
     /**
      * Caches method getTable, only read
      * @var null|string
@@ -172,11 +168,6 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     public function getFormGroups()
     {
         return array('default' => 'Основное');
-    }
-
-    public function getEntityActions(Application $app, $entity)
-    {
-        return array('_edit' => 'Редактировать', '_delete' => 'Удалить');
     }
 
     /**
@@ -964,57 +955,6 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         return implode('&', $filterGetQuery);
     }
 
-    /**
-     * @param Application $app
-     * @param             $id
-     *
-     * @return mixed
-     */
-    public function getEntity(Application $app, $id)
-    {
-        $query = "SELECT * FROM `{$this->table}` WHERE id = ?";
-
-        return $app['db']->fetchAssoc($query, array($id));
-    }
-
-    /**
-     * @param array $entity
-     * @param string $type ENTITY_ID_TYPE_* const
-     *
-     * @return array
-     */
-    public function getEntityId($entity, $type = self::ENTITY_ID_TYPE_ASSOC)
-    {
-        switch ($type) {
-            case self::ENTITY_ID_TYPE_ASSOC:
-                return array('id' => $entity['id']);
-
-            case self::ENTITY_ID_TYPE_SCALAR:
-                return $entity['id'];
-
-            case self::ENTITY_ID_TYPE_ARRAY:
-                return array($entity['id']);
-        }
-    }
-
-    /**
-     * @param Application $app
-     * @param string      $where
-     * @param string      $orderBy
-     * @param string      $offset
-     * @param string      $limit
-     *
-     * @return array
-     */
-    public function getEntitiesList(Application $app, $where, $orderBy, $offset, $limit)
-    {
-        $query = "SELECT * FROM `{$this->table}` {$where} {$orderBy} LIMIT {$offset}, {$limit}";
-
-        $entities = $app['db']->fetchAll($query);
-
-        return $entities;
-    }
-
     public function actionList(Application $app, $page)
     {
         $fieldNames = $this->getListFieldNames($app);
@@ -1040,7 +980,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         $offset = ($page - 1) * $perPage;
 
-        $entities = $this->getEntitiesList($app, $where, $orderBy, $offset, $perPage);
+        $entities = $app['webface.admin.current_service_container']
+            ->getEntityManager()
+            ->getEntitiesList($where, $orderBy, $offset, $perPage);
 
         $renderedFields = array();
 
@@ -1100,7 +1042,10 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         // prepare entity actions
         foreach ($entities as $k => $entity) {
-            $entities[$k]['actions'] = $this->getEntityActions($app, $entity);
+            // @todo change it to line under
+            $entities[$k]['actions'] = $app['webface.admin.current_service_container']
+                ->getListBuilder()
+                ->getEntityActions($entity);
         }
 
         return $app['twig']->render('list.twig', array(
@@ -1173,7 +1118,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionEdit(Application $app, $id)
     {
-        $entity = $this->getEntity($app, $id);
+        $entity = $app['webface.admin.current_service_container']
+            ->getEntityManager()
+            ->getEntity($id);
 
         $form = $this->getForm($app, $entity);
 
@@ -1186,7 +1133,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionUpdate(Application $app, $id)
     {
-        $entity = $this->getEntity($app, $id);
+        $entity = $app['webface.admin.current_service_container']
+            ->getEntityManager()
+            ->getEntity($id);
 
         $form = $this->getForm($app, $entity);
 
@@ -1211,7 +1160,10 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         if ($form->isValid()) {
             $data = $this->prepareFormToStore($app, $form);
-            $app['db']->update($this->table, $data, $this->getEntityId($entity));
+            $entityId = $app['webface.admin.current_service_container']
+                ->getEntityManager()
+                ->getEntityId($entity);
+            $app['db']->update($this->table, $data, $entityId);
             $this->saveRelationFields($id, $app, $form);
             $this->afterUpdated($app, $entity, $data);
 
@@ -1251,7 +1203,10 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         $form->submit($data);
         if ($form->isValid()) {
-            $app['db']->update($this->table, $this->prepareFormToStore($app, $form), $this->getEntityId($entity));
+            $entityId = $app['webface.admin.current_service_container']
+                ->getEntityManager()
+                ->getEntityId($entity);
+            $app['db']->update($this->table, $this->prepareFormToStore($app, $form), $entityId);
             $this->afterUpdated($app, $entity, $data);
             $result = true;
         } else {
@@ -1263,8 +1218,11 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionDelete(Application $app, $id)
     {
-        $entity = $this->getEntity($app, $id);
-        $app['db']->delete($this->table, $this->getEntityId($entity));
+        $entityManager = $app['webface.admin.current_service_container']->getEntityManager();
+        $entity   = $entityManager->getEntity($id);
+        $entityId = $entityManager->getEntityId($entity);
+
+        $app['db']->delete($this->table, $entityId);
         $this->deleteRelationEntities($app, $entity);
         $this->afterDeleted($app, $entity);
 

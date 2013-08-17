@@ -65,7 +65,9 @@
                                 <li class="nav-header">{{ group }}</li>
                                 {% for page in pages %}
                                     {% if page.role is not defined or is_granted(page.role) %}
-                                        <li {{ page.active is defined ? 'class="active"' : '' }}><a href="{{ path(page.table ~ '_list') }}">{{ page.label }}</a></li>
+                                        <li {{ page.active is defined ? 'class="active"' : '' }}>
+                                            <a href="{{ path(page.table ~ '_list') }}">{{ page.label }}</a>
+                                        </li>
                                     {% endif %}
                                 {% endfor %}
                             {% endif %}
