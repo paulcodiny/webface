@@ -789,15 +789,50 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                 continue;
             }
 
-            // delete all existent records
-            $app['db']->delete($config['relation_map_table'], array($config['relation_map_field'] => $id));
+            // get all existent records
+            $currentRelationEntities = $app['db']->fetchAll("SELECT * FROM `" . $config['relation_map_table'] . "`
+                WHERE `" . $config['relation_map_field'] . "` = ?", array($id));
+            $newRelationData = $data[$fieldName];
+
+
+            // search for new data
+            $dataToInsert = array();
+            foreach ($newRelationData as $i => $relationRowData) {
+                $existent = false;
+
+                // existent - exists both in new and in current
+                foreach ($currentRelationEntities as $j => $entity) {
+                    if ($entity[$config['relation_map_field']] == $id
+                            && $entity[$config['relation_map_foreign_field']] == $relationRowData) {
+                        $existent = true;
+                        unset($newRelationData[$i], $currentRelationEntities[$j]);
+                        break;
+                    }
+                }
+
+                // need to insert - exists in new but not in current
+                if (!$existent) {
+                    $dataToInsert[] = $relationRowData;
+                }
+            }
+
+            // need to delete - exists in current but not in new
+            if (count($currentRelationEntities)) {
+                $oldDataIds = array();
+                foreach ($currentRelationEntities as $entity) {
+                    $oldDataIds[] = $entity[$config['relation_map_foreign_field']];
+                }
+                $deleteQuery = "DELETE FROM `" . $config['relation_map_table'] . "`
+                    WHERE `" . $config['relation_map_foreign_field'] . "` NOT IN (" . implode(', ', $oldDataIds) . ")";
+                $app['db']->exec($deleteQuery);
+            }
+
 
             // insert new ones
-            $relationData = $data[$fieldName];
-            foreach ($relationData as $relationRowData) {
+            foreach ($dataToInsert as $relationRowData) {
                 $app['db']->insert($config['relation_map_table'], array(
                     $config['relation_map_field'] => $id,
-                    $config['relation_map_foreign_field'] => $relationRowData
+                    $config['relation_map_foreign_field'] => $relationRowData,
                 ));
             }
         }
