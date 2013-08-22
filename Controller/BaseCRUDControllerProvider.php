@@ -823,8 +823,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
                     $oldDataIds[] = $entity[$config['relation_map_foreign_field']];
                 }
                 $deleteQuery = "DELETE FROM `" . $config['relation_map_table'] . "`
-                    WHERE `" . $config['relation_map_foreign_field'] . "` NOT IN (" . implode(', ', $oldDataIds) . ")";
-                $app['db']->exec($deleteQuery);
+                    WHERE `". $config['relation_map_field'] . "` = ?
+                    AND `" . $config['relation_map_foreign_field'] . "` IN (" . implode(', ', $oldDataIds) . ")";
+                $app['db']->executeQuery($deleteQuery, array($id));
             }
 
 
