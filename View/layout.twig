@@ -8,7 +8,7 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 
-    <title>{% block title 'Виртуальная витрина | WebFace Администрирование' %}</title>
+    <title>{% block title 'WebFace Администрирование' %}</title>
 
     <meta name="description" content="">
     <meta name="viewport" content="width=device-width">
@@ -33,7 +33,7 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </a>
-            <a class="brand" href="/webface">Виртуальная витрина | WebFace Администрирование</a>
+            <a class="brand" href="/webface">WebFace Администрирование</a>
             <div class="nav-collapse collapse">
                 <p class="navbar-text pull-right">
                     {% if webface_username is defined %}
@@ -51,7 +51,7 @@
 <div class="container-fluid container-webface">
     <div class="row-fluid">
         {% block sidebar %}
-            <div class="span3">
+            <div class="sidebar span3">
                 <div class="well sidebar-nav">
                     <ul class="nav nav-list">
                         {% for group, pages in webface_navigation %}
