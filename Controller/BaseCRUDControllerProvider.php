@@ -4,6 +4,8 @@ namespace WebFace\Controller;
 
 use Silex\ControllerCollection;
 use Symfony\Component\Form\Form;
+use WebFace\CurrentServiceContainer;
+use WebFace\Definition;
 use WebFace\Entity\EntityManager;
 use WebFace\Form\Type\EmbeddedHasManyFormType;
 
@@ -17,6 +19,8 @@ use Silex\Application;
 use Silex\ControllerProviderInterface;
 
 use LogicException;
+use WebFace\ListControl\FilterBuilder;
+use WebFace\ListControl\ListBuilder;
 
 
 /**
@@ -31,6 +35,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
      */
     protected $table = null;
     protected $flashName = 'wf_flash';
+
+    /** @var Definition */
+    public $currentDefinition;
 
     public function __construct()
     {
@@ -81,6 +88,8 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function beforeAction(Application $app)
     {
+        $this->currentDefinition = $app['webface.admin.definition.' . $this->table];
+
         $flash = $app['session']->get($this->flashName);
 
         if (!empty($flash)) {
@@ -124,83 +133,6 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
     }
 
     /**
-     * @param Application $app
-     *
-     * @return array
-     */
-    public function getFields(Application $app)
-    {
-        return array();
-    }
-
-    /**
-     * @param \Silex\Application $app
-     *
-     * @return array
-     */
-    public function getListFieldNames(Application $app)
-    {
-        return array();
-    }
-
-    /**
-     * @param \Silex\Application $app
-     * @param null               $data
-     *
-     * @return array
-     */
-    public function getFormFieldNames(Application $app, $data = null)
-    {
-        return array();
-    }
-
-    /**
-     * @return array
-     */
-    public function getFilterFieldNames()
-    {
-        return array();
-    }
-
-    /**
-     * @return array
-     */
-    public function getFormGroups()
-    {
-        return array('default' => 'Основное');
-    }
-
-    /**
-     * Actions available in list page
-     * @param Application $app
-     * @return array
-     */
-    public function getListActions(Application $app)
-    {
-        return array('_add' => 'Добавить');
-    }
-
-    /**
-     * Строка с тем, как сортировать данные в списке
-     * String with order to list
-     * @example id DESC, position ASC
-     * @return string
-     */
-    public function getListOrder()
-    {
-        return 'id DESC';
-    }
-
-    /**
-     * Number of entities displaying by page
-     * @return int
-     */
-    public function getListPerPageCount()
-    {
-        return 20;
-    }
-
-    /**
      * Callback called after entity created
      * @param Application $app
      * @param int         $entityId
@@ -227,784 +159,21 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     }
 
-    public function describeFields(Application $app, array $fields)
-    {
-        $allFields = $this->getFields($app);
-        $describedFields = array();
-        foreach ($fields as $field) {
-            if (!isset($allFields[$field])) {
-                throw new InvalidConfigurationException('Field "' . $field . '" does not exist in method getFields()');
-            }
-            $fieldDescription = $allFields[$field];
-
-            // setDefaults
-            switch ($fieldDescription['type']) {
-                case 'relation':
-                    switch ($fieldDescription['config']['relation_type']) {
-                        case 'belongs_to':
-                            if (!isset($fieldDescription['config']['relation_field'])) {
-                                $fieldDescription['config']['relation_field'] = 'id';
-                            }
-                            break;
-                        case 'has_many':
-                            if (!isset($fieldDescription['config']['relation_field'])) {
-                                $fieldDescription['config']['relation_field'] = 'id';
-                            }
-                            break;
-                    }
-                    break;
-            }
-
-
-            $describedFields[$field] = $fieldDescription;
-        }
-
-        return $describedFields;
-    }
-
-    /**
-     * @param Application $app
-     * @param             $groups
-     *
-     * @throws \LogicException
-     */
-    public function addGroupsViewData(Application $app, $groups)
-    {
-        $formGroups = $this->getFormGroups();
-        $needGroups = array();
-        foreach ($formGroups as $formGroupName => $formGroupDefinition) {
-            if (is_array($formGroupDefinition)) {
-                if (!isset($formGroupDefinition['label'])) {
-                    throw new LogicException('Group "' . $formGroupName . '" must have label');
-                }
-
-                if (!isset($formGroupDefinition['role']) || $app['security']->isGranted($formGroupDefinition)) {
-                    $needGroups[$formGroupName] = $formGroupDefinition;
-                }
-            } else {
-                $needGroups[$formGroupName] = array('label' => $formGroupDefinition);
-            }
-        }
-
-        $app['twig']->addGlobal('webface_need_groups', $needGroups);
-        $app['twig']->addGlobal('webface_fields_by_group', $groups);
-    }
-
-    public function prepareData(Application $app, $fields, $data)
-    {
-        foreach ($fields as $fieldName => $field) {
-            if (isset($field['config']['default']) && !isset($data[$fieldName])) {
-                if (is_callable($field['config']['default'])) {
-                    $data[$fieldName] = $field['config']['default']($app);
-                } else {
-                    $data[$fieldName] = $field['config']['default'];
-                }
-            }
-        }
-
-        return $data;
-    }
-
-    /**
-     * @param Application $app
-     * @param null        $data
-     *
-     * @return Form
-     */
-    public function getForm(Application $app, $data = null)
-    {
-        $fieldNames = $this->getFormFieldNames($app, $data);
-        $fields = $this->describeFields($app, $fieldNames);
-
-        $data = $this->prepareData($app, $fields, $data);
-
-        $builder = $app['form.factory']->createNamedBuilder('entity', 'form', $data, array('csrf_protection' => false));
-
-        return $this->addFieldsToBuilder($fields, $builder, $app, $data)->getForm();
-    }
-
-    /**
-     * @param array                $fields
-     * @param FormBuilderInterface $builder
-     * @param Application          $app
-     * @param array                [$data=null]
-     *
-     * @return FormBuilderInterface
-     */
-    public function addFieldsToBuilder($fields, FormBuilderInterface $builder, Application $app, $data = null)
-    {
-        // check groups
-        $defaultGroup = 'default';
-
-        // first add default group so its position will be the first
-        $groups = array($defaultGroup => array());
-        foreach ($fields as $fieldName => $field) {
-            $field['name'] = $fieldName;
-
-            if (!isset($field['config']['fields_group'])) {
-                if (isset($field['config'])) {
-                    $field['config']['fields_group'] = $defaultGroup;
-                } else {
-                    $field['config'] = array('fields_group' => $defaultGroup);
-                }
-            }
-
-            $fieldsGroup = $field['config']['fields_group'];
-            if (!isset($groups[$fieldsGroup])) {
-                $groups[$fieldsGroup] = array();
-            }
-
-            $groups[$fieldsGroup][$fieldName] = $field;
-        }
-
-        if (!count($groups[$defaultGroup])) {
-            unset($groups[$defaultGroup]);
-        }
-
-        foreach ($fields as $fieldName => $field) {
-            $field['name'] = $fieldName;
-            $this->addFieldToBuilder($field, $builder, $app, $data);
-        }
-        
-        // if there is one group - push all fields to the root
-        if (count($groups) > 1) {
-            $this->addGroupsViewData($app, $groups);
-        }
-
-        return $builder;
-    }
-
-    public function addFieldToBuilder($field, FormBuilderInterface $builder, Application $app, $data = null)
-    {
-        $fieldName = $field['name'];
-        $fieldType = false;
-        $fieldOptions = array();
-        if ($data && isset($data[$fieldName])) {
-            $field['value'] = $data[$fieldName];
-        }
-
-        if (!isset($field['config'])) {
-            $field['config'] = array();
-        }
-        $config = &$field['config'];
-        $config = array_merge(array('required' => true), $config);
-        switch ($field['type']) {
-            case 'text':
-                $fieldType = 'text';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                );
-                break;
-            case 'textarea':
-                $fieldType = 'textarea';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                    'attr'     => array(
-                        'class' => 'input-xlarge',
-                    ),
-                );
-                break;
-            case 'html':
-                $globals = $app['twig']->getGlobals();
-                $htmls = isset($globals['webface_htmls']) ? $globals['webface_htmls'] : array();
-                $htmls[] = $fieldName;
-                $app['twig']->addGlobal('webface_htmls', $htmls);
-                $app['twig']->addGlobal('webface_need_html', true);
-                $fieldType = 'tinymce_textarea';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                );
-                break;
-            case 'slug':
-                $globals = $app['twig']->getGlobals();
-                $slugs = isset($globals['webface_slugs']) ? $globals['webface_slugs'] : array();
-                $slugs[$fieldName] = $config['from_field'];
-                $app['twig']->addGlobal('webface_slugs', $slugs);
-                $app['twig']->addGlobal('webface_need_to_slug', true);
-
-                // change type and add this field as usual
-                $field['type'] = 'text';
-                $this->addFieldToBuilder($field, $builder, $app, $data);
-                break;
-            case 'password':
-                $fieldType = 'password';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                );
-                break;
-            case 'integer':
-                $fieldType = 'integer';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                );
-                break;
-            case 'number':
-                $fieldType = 'number';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                );
-                break;
-            case 'primary':
-            case 'hidden':
-                $fieldType = 'hidden';
-                $fieldOptions = array();
-                break;
-            case 'boolean':
-                if (isset($field['value'])) {
-                    $currentData = $builder->getData();
-                    $currentData[$fieldName] = (bool) $field['value'];
-                    $builder->setData($currentData);
-                }
-                $fieldType = 'checkbox';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    'required' => $config['required'],
-                );
-                break;
-            case 'file':
-                // add hidden field which then be overwritten by hardcoded select field
-                $builder->add('_' . $fieldName . '_action', 'hidden');
-                $fieldType = 'file';
-                $fieldOptions = array(
-                    'label'    => $field['label'],
-                    //'required'     => !empty($field['value']) ? false : $config['required'],
-                    'required' => false,
-                    'data_class' => null,
-                );
-                break;
-            case 'image':
-                // add hidden field which then be overwritten by hardcoded select field
-                $builder->add('_' . $fieldName . '_action', 'hidden');
-                $fieldType = 'editable_image';
-                $fieldOptions = array(
-                    'label'        => $field['label'],
-                    'required'     => !empty($field['value']) ? false : $config['required'],
-                    'path'         => $app['webface.upload_url'] . '/' . $field['type'] . 's/' . $config['destination'] . '/',
-                    'allow_delete' => !$config['required']
-                );
-                break;
-            case 'enum':
-                $fieldType = 'choice';
-                $fieldOptions = array(
-                    'label'       => $field['label'],
-                    'choices'     => $config['options'],
-                    'expanded'    => false,
-                    'required'    => $config['required'],
-                    'empty_value' => isset($config['empty_value'])
-                        ? $config['empty_value']
-                        : ($config['required'] ? false : ''),
-                    'attr'        => array(
-                        'class' => 'field-enum',
-                    ),
-                );
-                break;
-            case 'relation':
-                switch ($config['relation_type']) {
-                    case 'belongs_to':
-                        if (isset($config['relation_options_getter'])) {
-                            $options = $this->$config['relation_options_getter']($app, $fieldName, $field);
-                        } else {
-                            $condition = isset($config['relation_condition']) ? "WHERE {$config['relation_condition']}" : '';
-                            $query = "SELECT {$config['relation_field']}, {$config['relation_display']}
-                            FROM {$config['relation_table']}"
-                                . $condition;
-                            $entities = $app['db']->fetchAll($query);
-                            $options = array();
-                            foreach ($entities as $entity) {
-                                $options[$entity[$config['relation_field']]] = $entity[$config['relation_display']];
-                            }
-                        }
-
-                        // подменяем поле, чтобы добавить
-                        $field['type'] = 'enum';
-                        $field['config'] = array(
-                            'options'     => $options,
-                            'required'    => $config['required'],
-                        );
-                        if (isset($config['empty_value'])) {
-                            $field['config']['empty_value'] = $config['empty_value'];
-                        }
-
-                        $this->addFieldToBuilder($field, $builder, $app, $data);
-                        break;
-
-                    case 'has_many':
-                        /** @var BaseCRUDControllerProvider $relationController */
-                        $relationController = $config['relation_controller'];
-                        if (!isset($config['relation_field'])) {
-                            $config['relation_field'] = 'id';
-                        }
-                        if (!isset($config['relation_foreign_field'])) {
-                            $config['relation_foreign_field'] = $relationController->getReferenceField($app, $this->getTable());
-                        }
-
-                        // @todo relation_condition?
-                        if ($data && isset($data[$config['relation_field']])) {
-                            $condition = " WHERE `{$config['relation_foreign_field']}` = {$data[$config['relation_field']]}";
-
-                            $query = "SELECT " . implode(', ', array_merge(array('id'), $relationController->getFormFieldNames($app)))
-                                . " FROM {$relationController->getTable()}"
-                                . $condition;
-                            $entities = $app['db']->fetchAll($query);
-
-                            if (count($entities)) {
-                                $currentData = $builder->getData();
-                                if (!$currentData) {
-                                    $currentData = array();
-                                }
-
-                                // dirty hack to prevent boolean exception
-                                $relationController = $field['config']['relation_controller'];
-                                $relationFields = $relationController->describeFields($app, $relationController->getFormFieldNames($app, $entities));
-                                foreach ($relationFields as $relationFieldName => $relationField) {
-                                    if ($relationField['type'] === 'boolean') {
-                                        foreach ($entities as &$entity) {
-                                            if (isset($entity[$relationFieldName])) {
-                                                $entity[$relationFieldName] = (bool) $entity[$relationFieldName];
-                                            }
-                                        }
-                                    }
-                                }
-
-                                $builder->setData(array_merge($currentData, array($fieldName => $entities)));
-                            }
-                        }
-
-                        $globals = $app['twig']->getGlobals();
-                        $collections = isset($globals['webface_collections']) ? $globals['webface_collections'] : array();
-                        $collections[] = $fieldName;
-                        $app['twig']->addGlobal('webface_collections', $collections);
-                        $app['twig']->addGlobal('webface_need_collections', true);
-
-                        $formType = new EmbeddedHasManyFormType($app, $this, $fieldName, $field);
-                        $fieldType = 'collection';
-                        $fieldOptions = array(
-                            'label' => $field['label'],
-                            'attr' => array(
-                                'class' => 'collection',
-                            ),
-                            'type' => $formType,
-                            'allow_add' => true,
-                            'allow_delete' => true,
-                            'by_reference' => false,
-                        );
-                        break;
-
-                    case 'has_many_and_belongs_to':
-                        if (isset($config['relation_options_getter']) && method_exists($this, $config['relation_options_getter'])) {
-                            $options = $this->$config['relation_options_getter']($app, $fieldName, $field);
-                        } else {
-                            $condition = isset($config['relation_condition']) ? "WHERE {$config['relation_condition']}" : '';
-                            $query = "SELECT {$config['relation_foreign_field']}, {$config['relation_foreign_display']}
-                            FROM {$config['relation_table']}"
-                                . $condition;
-                            $entities = $app['db']->fetchAll($query);
-                            $options = array();
-                            foreach ($entities as $entity) {
-                                $options[$entity[$config['relation_foreign_field']]] = $entity[$config['relation_foreign_display']];
-                            }
-                        }
-
-                        if ($data && isset($data[$config['relation_field']])) {
-                            if (isset($config['relation_options_setter'])) {
-                                $fieldData = $this->$config['relation_options_setter']($app, $data, $fieldName, $field);
-                            } else {
-                                $query = "SELECT * FROM {$config['relation_map_table']}"
-                                    . " WHERE `{$config['relation_map_field']}` = {$data[$config['relation_field']]}";
-                                $entities = $app['db']->fetchAll($query);
-                                $fieldData = array();
-                                foreach ($entities as $entity) {
-                                    $fieldData[] = $entity[$config['relation_map_foreign_field']];
-                                }
-                            }
-
-                            $currentData = $builder->getData();
-                            if (!$currentData) {
-                                $currentData = array();
-                            }
-
-                            $builder->setData(array_merge($currentData, array($fieldName => $fieldData)));
-                        }
-
-                        $fieldType = 'grouped_choice';
-                        $fieldOptions = array(
-                            'label'    => $field['label'],
-                            'choices'  => $options,
-                            'expanded' => true,
-                            'required' => $config['required'],
-                            'multiple' => true,
-                            'attr' => array(
-                                'class' => 'grouped-choice',
-                            ),
-                        );
-                        break;
-                }
-
-                break;
-
-            default:
-                throw new InvalidConfigurationException('Field "' . $fieldName . '" has unknown type "' . $field['type'] . '"');
-                break;
-        }
-
-        if (isset($config['field_type'])) {
-            $fieldType = $config['field_type'];
-        }
-
-        if ($fieldType) {
-            $builder->add($fieldName, $fieldType, $fieldOptions);
-        }
-    }
-
-    /**
-     * @todo Переделать на событие формы preBind
-     * @param Application $app
-     * @param Form        $form
-     * @return mixed
-     */
-    public function prepareFormToStore(Application $app, Form $form)
-    {
-        $data = $form->getData();
-        $fields = $this->describeFields($app, $this->getFormFieldNames($app, $data));
-        foreach ($data as $fieldName => $value) {
-            if (!isset($fields[$fieldName])) {
-                continue;
-            }
-            $fieldDefinition = $fields[$fieldName];
-            switch ($fieldDefinition['type']) {
-                case 'password':
-                    $password = $app['security.encoder.digest']->encodePassword($value, null);
-                    $data[$fieldName] = $password;
-                    break;
-                case 'image':
-                case 'file':
-                    if (isset($data['_' . $fieldName . '_action'])) {
-                        $action = $data['_' . $fieldName . '_action'];
-                    } else {
-                        $action = 'update';
-                    }
-                    unset($data['_' . $fieldName . '_action']);
-
-                    switch ($action) {
-                        case 'stet':
-                            unset($data[$fieldName]);
-                            break;
-                        case 'delete':
-                            $data[$fieldName] = null;
-                            break;
-                        case 'update':
-                        default:
-                            $file = $form[$fieldName]->getData();
-                            if (!$file instanceof UploadedFile) {
-                                unset($data[$fieldName]);
-                                continue;
-                            }
-
-                            $extension = $file->guessExtension();
-                            if (!$extension) {
-                                $extension = 'jpg';
-                            }
-                            $filename = $app['webface.admin']->generateRandomString() . '.' . $extension;
-                            $file->move($app['webface.upload_dir'] . '/' . $fieldDefinition['type'] . 's/' . $fieldDefinition['config']['destination'], $filename);
-                            $data[$fieldName] = $filename;
-                            break;
-                    }
-                    break;
-                case 'relation':
-                    switch ($fieldDefinition['config']['relation_type']) {
-                        case 'has_many':
-                            unset($data[$fieldName]);
-                            break;
-                        case 'has_many_and_belongs_to':
-                            unset($data[$fieldName]);
-                            break;
-                    }
-                    break;
-            }
-        }
-
-        return $data;
-    }
-
-    public function saveHasManyFields($hasManyFields, $id, Application $app, Form $form)
-    {
-        $data = $form->getData();
-        foreach ($hasManyFields as $fieldName => $field) {
-            if (!isset($data[$fieldName])) {
-                // there is nothing to save (possible, field was removed)
-                continue;
-            }
-
-            $config = &$field['config'];
-            /** @var BaseCRUDControllerProvider $relationController */
-            $relationController = $config['relation_controller'];
-            if (!isset($config['relation_field'])) {
-                $config['relation_field'] = 'id';
-            }
-            if (!isset($config['relation_foreign_field'])) {
-                $config['relation_foreign_field'] = $relationController->getReferenceField($app, $this->getTable());
-            }
-            $relationData = $data[$fieldName];
-            $formType = new EmbeddedHasManyFormType($app, $this, $fieldName, $field, false);
-            foreach ($relationData as $relationRowData) {
-                $relationRowData[$config['relation_foreign_field']] = $id;
-                /** @var Form $form */
-                $form = $app['form.factory']
-                    ->createBuilder($formType, null, array('csrf_protection' => false))
-                    ->getForm()
-                    ->submit($relationRowData);
-                if ($form->isValid()) {
-                    $relationValidData = $relationController->prepareFormToStore($app, $form);
-                    if (isset($relationValidData['id'])) {
-                        $relationRowId = $relationValidData['id'];
-                        unset($relationValidData['id']);
-                        $app['db']->update($relationController->getTable(), $relationValidData, array('id' => $relationRowId));
-                    } else {
-                        $app['db']->insert($relationController->getTable(), $relationValidData);
-                    }
-                }
-            }
-        }
-    }
-
-    public function saveHasManyAndBelongsToFields($hasManyAndBelongsToFields, $id, $app, Form $form)
-    {
-        $data = $form->getData();
-        foreach ($hasManyAndBelongsToFields as $fieldName => $field) {
-            $config = $field['config'];
-
-            if (isset($config['relation_options_saver'])) {
-                $this->$config['relation_options_saver']($app, $id, $data, $fieldName, $field);
-
-                continue;
-            }
-
-            if (!isset($data[$fieldName])) {
-                continue;
-            }
-
-            // get all existent records
-            $currentRelationEntities = $app['db']->fetchAll("SELECT * FROM `" . $config['relation_map_table'] . "`
-                WHERE `" . $config['relation_map_field'] . "` = ?", array($id));
-            $newRelationData = $data[$fieldName];
-
-
-            // search for new data
-            $dataToInsert = array();
-            foreach ($newRelationData as $i => $relationRowData) {
-                $existent = false;
-
-                // existent - exists both in new and in current
-                foreach ($currentRelationEntities as $j => $entity) {
-                    if ($entity[$config['relation_map_field']] == $id
-                            && $entity[$config['relation_map_foreign_field']] == $relationRowData) {
-                        $existent = true;
-                        unset($newRelationData[$i], $currentRelationEntities[$j]);
-                        break;
-                    }
-                }
-
-                // need to insert - exists in new but not in current
-                if (!$existent) {
-                    $dataToInsert[] = $relationRowData;
-                }
-            }
-
-            // need to delete - exists in current but not in new
-            if (count($currentRelationEntities)) {
-                $oldDataIds = array();
-                foreach ($currentRelationEntities as $entity) {
-                    $oldDataIds[] = $entity[$config['relation_map_foreign_field']];
-                }
-                $deleteQuery = "DELETE FROM `" . $config['relation_map_table'] . "`
-                    WHERE `". $config['relation_map_field'] . "` = ?
-                    AND `" . $config['relation_map_foreign_field'] . "` IN (" . implode(', ', $oldDataIds) . ")";
-                $app['db']->executeQuery($deleteQuery, array($id));
-            }
-
-
-            // insert new ones
-            foreach ($dataToInsert as $relationRowData) {
-                $app['db']->insert($config['relation_map_table'], array(
-                    $config['relation_map_field'] => $id,
-                    $config['relation_map_foreign_field'] => $relationRowData,
-                ));
-            }
-        }
-    }
-
-    public function getHasManyFields($app)
-    {
-        $hasManyFields = array();
-        $fields = $this->getFields($app);
-        foreach ($fields as $fieldName => $field) {
-            if ($field['type'] == 'relation' && $field['config']['relation_type'] == 'has_many') {
-                $hasManyFields[$fieldName] = $field;
-            }
-        }
-
-        return $hasManyFields;
-    }
-
-    public function getBelongsToFields($app)
-    {
-        $belongsToFields = array();
-        $fields = $this->getFields($app);
-        foreach ($fields as $fieldName => $field) {
-            if ($field['type'] == 'relation' && $field['config']['relation_type'] == 'belongs_to') {
-                $belongsToFields[$fieldName] = $field;
-            }
-        }
-
-        return $belongsToFields;
-    }
-
-    public function getHasManyAndBelongsToFields($app)
-    {
-        $hasManyAndBelongsToFields = array();
-        $fields = $this->getFields($app);
-        foreach ($fields as $fieldName => $field) {
-            if ($field['type'] == 'relation' && $field['config']['relation_type'] == 'has_many_and_belongs_to') {
-                $hasManyAndBelongsToFields[$fieldName] = $field;
-            }
-        }
-
-        return $hasManyAndBelongsToFields;
-    }
-
-    public function saveRelationFields($id, Application $app, Form $form)
-    {
-        $hasManyFields = $this->getHasManyFields($app);
-        if (count($hasManyFields) > 0) {
-            $this->saveHasManyFields($hasManyFields, $id, $app, $form);
-        }
-
-        $hasManyAndBelongsToFields = $this->getHasManyAndBelongsToFields($app);
-        if (count($hasManyAndBelongsToFields) > 0) {
-            $this->saveHasManyAndBelongsToFields($hasManyAndBelongsToFields, $id, $app, $form);
-        }
-    }
-
-    public function deleteRelationEntities(Application $app, $entity)
-    {
-        $hasManyAndBelongsToFields = $this->getHasManyAndBelongsToFields($app);
-        foreach ($hasManyAndBelongsToFields as $fieldName => $field) {
-            if (isset($field['config']['relation_on_delete'])) {
-                if ($field['config']['relation_on_delete'] == 'delete') {
-                    $app['db']->delete($field['config']['relation_map_table'], array(
-                        $field['config']['relation_map_field'] => $entity[$field['config']['relation_field']]
-                    ));
-                } elseif ($field['config']['relation_on_delete'] == 'set_null') {
-
-                }
-            }
-        }
-
-        $hasMany = $this->getHasManyFields($app);
-        foreach ($hasMany as $fieldName => $field) {
-            if (isset($field['config']['relation_on_delete'])) {
-                if ($field['config']['relation_on_delete'] == 'delete') {
-                    $relationController = $field['config']['relation_controller'];
-                    if (!isset($config['relation_field'])) {
-                        $config['relation_field'] = 'id';
-                    }
-                    if (!isset($config['relation_foreign_field'])) {
-                        $config['relation_foreign_field'] = $relationController->getReferenceField($app, $this->getTable());
-                    }
-
-                    $app['db']->delete($relationController->getTable(), array($config['relation_foreign_field'] => $entity[$config['relation_field']]));
-
-                } elseif ($field['config']['relation_on_delete'] == 'set_null') {
-
-                }
-            }
-        }
-    }
-
-    public function getReferenceField(Application $app, $table)
-    {
-        foreach ($this->getFields($app) as $fieldName => $field) {
-            if ($field['type'] === 'relation'
-                    && $field['config']['relation_type'] === 'belongs_to'
-                    && $field['config']['relation_table'] === $table) {
-                return $fieldName;
-            }
-        }
-    }
-
-
-    public function getFilter(Application $app)
-    {
-        $data = $app['request']->get('filter', array());
-        $builder = $app['form.factory']->createNamedBuilder('filter', 'form', $data, array('csrf_protection' => false));
-
-        $fieldNames = $this->getFilterFieldNames();
-        $fields = $this->describeFields($app, $fieldNames);
-        foreach ($fields as &$field) {
-            $field['config']['required'] = false;
-        }
-
-        return $this->addFieldsToBuilder($fields, $builder, $app, $data)->getForm();
-    }
-
-    public function getFilterCriteria(Application $app)
-    {
-        $filterCriteria = array();
-        $filterParams = $app['request']->query->get('filter');
-        $fieldNames = $this->getFilterFieldNames();
-        foreach ($fieldNames as $fieldName) {
-            if (!empty($filterParams[$fieldName])) {
-                $filterCriteria[$fieldName] = $filterParams[$fieldName];
-            }
-        }
-
-        return $filterCriteria;
-    }
-
-    public function buildFilterQuery(Application $app)
-    {
-        $filterQuery = array();
-        $filterCriteria = $this->getFilterCriteria($app);
-        foreach ($filterCriteria as $fieldName => $filter) {
-            $filterQuery[] = is_numeric($filter)
-                ? "`{$fieldName}` = {$filter}"
-                : "`{$fieldName}` LIKE '%{$filter}%'";
-        }
-
-        return implode(' AND ', $filterQuery);
-    }
-
-    public function buildFilterGetQuery(Application $app)
-    {
-        $filterGetQuery = array();
-        $filterCriteria = $this->getFilterCriteria($app);
-        foreach ($filterCriteria as $fieldName => $filter) {
-            $filterGetQuery[] = "filter[{$fieldName}]={$filter}";
-        }
-
-        return implode('&', $filterGetQuery);
-    }
-
     public function actionList(Application $app, $page)
     {
-        $fieldNames = $this->getListFieldNames($app);
-        $fields = $this->describeFields($app, $fieldNames);
+        $fields = $this->currentDefinition->getListFieldsDefinition();
 
-        $filterWhereClause = $this->buildFilterQuery($app);
+        $filterWhereClause = $this->currentDefinition->getFilterBuilder()->buildFilterQuery();
+
+        // pagination here
         $where = $filterWhereClause ? 'WHERE ' . $filterWhereClause : '';
-        $orderBy = 'ORDER BY ' . $this->getListOrder();
+        $orderBy = 'ORDER BY ' . $this->currentDefinition->getListOrder();
 
         $queryCount = "SELECT COUNT(*) AS `count` FROM `{$this->table}` {$where};";
         $count = $app['db']->fetchAssoc($queryCount);
         $count = $count['count'];
 
-        $perPage = $this->getListPerPageCount();
+        $perPage = $this->currentDefinition->getListPerPageCount();
         $maxPage = max(ceil($count * 1.0 / $perPage * 1.0), 1);
         if ($page < 1) {
             $page = 1;
@@ -1016,9 +185,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         $offset = ($page - 1) * $perPage;
 
-        $entities = $app['webface.admin.current_service_container']
-            ->getEntityManager()
-            ->getEntitiesList($where, $orderBy, $offset, $perPage);
+        $entities = $this->currentDefinition->getEntityManager()->getEntitiesList($where, $orderBy, $offset, $perPage);
+
+        // pagination end
 
         $renderedFields = array();
 
@@ -1036,7 +205,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             $app['twig']->addGlobal('webface_need_list_inline_edit', true);
             foreach ($entities as $k => $entity) {
                 $builder = $app['form.factory']->createNamedBuilder('entity', 'form', $entity, array('csrf_protection' => false));
-                $this->addFieldsToBuilder($listEditFields, $builder, $app, $entity);
+                $this->currentDefinition->getFormBuilder()->addFieldsToBuilder($listEditFields, $builder, $entity);
                 $entities[$k]['list_edit_form'] = $builder->getForm()->createView();
             }
         }
@@ -1045,7 +214,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         foreach ($fields as $fieldName => $field) {
             if (isset($field['config']['list_display'])) {
                 foreach ($entities as $k => $entity) {
-                    $entities[$k][$fieldName] = $this->$field['config']['list_display']($app, $entity);
+                    $entities[$k][$fieldName] = $this->currentDefinition->getListBuilder()->$field['config']['list_display']($entity);
                 }
 
                 $renderedFields[] = $fieldName;
@@ -1071,17 +240,14 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             }
         }
 
-        $filter = $this->getFilter($app);
+        $filter = $this->currentDefinition->getFilterBuilder()->getForm();
         if ($filter->count()) {
             $app['twig']->addGlobal('webface_need_list_filter', true);
         }
 
         // prepare entity actions
         foreach ($entities as $k => $entity) {
-            // @todo change it to line under
-            $entities[$k]['actions'] = $app['webface.admin.current_service_container']
-                ->getListBuilder()
-                ->getEntityActions($entity);
+            $entities[$k]['actions'] = $this->currentDefinition->getListBuilder()->getEntityActions($entity);
         }
 
         return $app['twig']->render('list.twig', array(
@@ -1089,7 +255,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
             'fields'     => $fields,
             'filter'     => $filter->createView(),
             'entities'   => $entities,
-            'actions'    => $this->getListActions($app),
+            'actions'    => $this->currentDefinition->getListBuilder()->getActions(),
             'paging'     => array(
                 'current_page' => $page,
                 'max_page'     => $maxPage,
@@ -1102,7 +268,7 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionNew(Application $app)
     {
-        $form = $this->getForm($app);
+        $form = $this->currentDefinition->getFormBuilder()->getForm();
 
         return $app['twig']->render('new.twig', array(
             'table' => $this->table,
@@ -1113,17 +279,17 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionCreate(Application $app)
     {
-        $form = $this->getForm($app);
+        $form = $this->currentDefinition->getFormBuilder()->getForm();
 
         $form->handleRequest($app['request']);
 
         if ($form->isValid()) {
-            $data = $this->prepareFormToStore($app, $form);
+            $data = $this->currentDefinition->getFormBuilder()->prepareFormToStore($form);
 
             $app['db']->insert($this->table, $data);
             $entityId = $app['db']->lastInsertId();
 
-            $this->saveRelationFields($entityId, $app, $form);
+            $this->currentDefinition->getEntity()->saveRelationFields($entityId, $form);
 
             $this->afterCreated($app, $entityId, $data);
 
@@ -1154,11 +320,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionEdit(Application $app, $id)
     {
-        $entity = $app['webface.admin.current_service_container']
-            ->getEntityManager()
-            ->getEntity($id);
+        $entity = $this->currentDefinition->getEntityManager()->getEntity($id);
 
-        $form = $this->getForm($app, $entity);
+        $form = $this->currentDefinition->getFormBuilder()->getForm($entity);
 
         return $app['twig']->render('edit.twig', array(
             'table'  => $this->table,
@@ -1169,11 +333,9 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionUpdate(Application $app, $id)
     {
-        $entity = $app['webface.admin.current_service_container']
-            ->getEntityManager()
-            ->getEntity($id);
+        $entity = $this->currentDefinition->getEntityManager()->getEntity($id);
 
-        $form = $this->getForm($app, $entity);
+        $form = $this->currentDefinition->getFormBuilder()->getForm($entity);
 
         $success = array(
             'type' => 'success',
@@ -1195,12 +357,10 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
         $form->handleRequest($app['request']);
 
         if ($form->isValid()) {
-            $data = $this->prepareFormToStore($app, $form);
-            $entityId = $app['webface.admin.current_service_container']
-                ->getEntityManager()
-                ->getEntityId($entity);
+            $data = $this->currentDefinition->getFormBuilder()->prepareFormToStore($form);
+            $entityId = $this->currentDefinition->getEntityManager()->getEntityId($entity);
             $app['db']->update($this->table, $data, $entityId);
-            $this->saveRelationFields($id, $app, $form);
+            $this->currentDefinition->getEntity()->saveRelationFields($id, $form);
             $this->afterUpdated($app, $entity, $data);
 
             $app['session']->set($this->flashName, $success);
@@ -1230,19 +390,17 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
         // OH GOD, symfony2 forms converts all values except NULL in true in checkboxes
         // so make them NULL
-        foreach ($this->describeFields($app, $this->getListFieldNames($app)) as $fieldName => $field) {
+        foreach ($this->currentDefinition->getListFieldsDefinition() as $fieldName => $field) {
             if (isset($field['config']['list_edit']) && $field['config']['list_edit']
-                && $field['type'] == 'boolean') {
+                    && $field['type'] == 'boolean') {
                 $data[$fieldName] = $data[$fieldName] ? $data[$fieldName] : null;
             }
         }
 
         $form->submit($data);
         if ($form->isValid()) {
-            $entityId = $app['webface.admin.current_service_container']
-                ->getEntityManager()
-                ->getEntityId($entity);
-            $app['db']->update($this->table, $this->prepareFormToStore($app, $form), $entityId);
+            $entityId = $this->currentDefinition->getEntityManager()->getEntityId($entity);
+            $app['db']->update($this->table, $this->currentDefinition->getFormBuilder()->prepareFormToStore($form), $entityId);
             $this->afterUpdated($app, $entity, $data);
             $result = true;
         } else {
@@ -1254,12 +412,12 @@ class BaseCRUDControllerProvider implements ControllerProviderInterface
 
     public function actionDelete(Application $app, $id)
     {
-        $entityManager = $app['webface.admin.current_service_container']->getEntityManager();
+        $entityManager = $this->currentDefinition->getEntityManager();
         $entity   = $entityManager->getEntity($id);
         $entityId = $entityManager->getEntityId($entity);
 
         $app['db']->delete($this->table, $entityId);
-        $this->deleteRelationEntities($app, $entity);
+        $this->currentDefinition->getEntity()->deleteRelationEntities($entity);
         $this->afterDeleted($app, $entity);
 
         // @todo Flashes about deleting are not displayed, fix it

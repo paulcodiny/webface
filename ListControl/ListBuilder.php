@@ -14,11 +14,45 @@ class ListBuilder
         $this->app = $app;
     }
 
+    /**
+     * @return array
+     */
     public function getFieldNames()
     {
         return array();
     }
 
+    /**
+     * @return string
+     */
+    public function getOrder()
+    {
+        return 'id DESC';
+    }
+
+    /**
+     * @return int
+     */
+    public function getPerPageCount()
+    {
+        return 20;
+    }
+
+    /**
+     * Actions available in list page
+     *
+     * @return array
+     */
+    public function getActions()
+    {
+        return array('_add' => 'Добавить');
+    }
+
+    /**
+     * @param array $entity
+     *
+     * @return array
+     */
     public function getEntityActions($entity)
     {
         return array(

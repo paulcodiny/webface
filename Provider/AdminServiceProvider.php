@@ -10,8 +10,12 @@ use Silex\Application;
 use WebFace\Admin;
 use WebFace\Controller\DashboardControllerProvider;
 use WebFace\CurrentServiceContainer;
+use WebFace\Definition;
+use WebFace\Entity\Entity;
 use WebFace\Entity\EntityManager;
 use WebFace\Form\Type;
+use WebFace\Form\FormBuilder;
+use WebFace\ListControl\FilterBuilder;
 use WebFace\ListControl\ListBuilder;
 
 class AdminServiceProvider implements ServiceProviderInterface
@@ -44,30 +48,10 @@ class AdminServiceProvider implements ServiceProviderInterface
             $navigation[$group][] = $definition;
             $tableNames[$table]   = $definition['label'];
 
-            $services = array(
-                'list.builder'   => new ListBuilder($app),
-                'entity.manager' => new EntityManager($app, $table),
-            );
-            if (isset($definition['extends'])) {
-                $services = array_merge($services, $definition['extends']);
-            }
-
-            foreach ($services as $serviceName => $service) {
-                if (is_string($service)) {
-                    switch ($serviceName) {
-                        case 'list.builder':
-                            $service = new $service($app);
-                            break;
-                        case 'entity.manager':
-                            $service = new $service($app, $table);
-                            break;
-                    }
-                }
-
-                $app['webface.' . $table . '.' . $serviceName] = $app->share(function() use ($service) {
-                    return $service;
-                });
-            }
+            /** @var Definition $tableDefinition */
+            $tableDefinition = new $definition['definition']($app, $table);
+            $tableDefinition->defineDependencies();
+            $app['webface.admin.definition.' . $table] = $tableDefinition;
         }
 
         $app->extend('form.types', $app->share(function ($types) {

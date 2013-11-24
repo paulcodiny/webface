@@ -2,9 +2,12 @@
 
 namespace WebFace;
 
+use FormBuilder;
 use \Silex\Application;
 
+use WebFace\Entity\Entity;
 use WebFace\Entity\EntityManager;
+use WebFace\ListControl\FilterBuilder;
 use WebFace\ListControl\ListBuilder;
 
 class CurrentServiceContainer
@@ -48,6 +51,16 @@ class CurrentServiceContainer
     }
 
     /**
+     * @return FilterBuilder
+     */
+    public function getFilterBuilder()
+    {
+        $this->checkCurrentTable();
+
+        return $this->app['webface.' . $this->currentTable . '.list.filter'];
+    }
+
+    /**
      * @return EntityManager
      */
     public function getEntityManager()
@@ -55,5 +68,25 @@ class CurrentServiceContainer
         $this->checkCurrentTable();
 
         return $this->app['webface.' . $this->currentTable . '.entity.manager'];
+    }
+
+    /**
+     * @return Entity
+     */
+    public function getEntity()
+    {
+        $this->checkCurrentTable();
+
+        return $this->app['webface.' . $this->currentTable . '.entity'];
+    }
+
+    /**
+     * @return FormBuilder
+     */
+    public function getFormBuilder()
+    {
+        $this->checkCurrentTable();
+
+        return $this->app['webface.' . $this->currentTable . '.form.builder'];
     }
 }

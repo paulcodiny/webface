@@ -1,7 +1,7 @@
 {% extends 'layout.twig' %}
 
 {% block content %}
-    <div class="span9 content content-list content-list-{{ table }}">
+    <div class="span10 content content-list content-list-{{ table }}">
         {% spaceless %}
             <h2>
                 {{ webface_current_table_label }}
@@ -64,15 +64,6 @@
                                     <a href="{{ actionName.url }}">{{ actionName.label }}</a>
                                 {% endif %}
                             {% endif %}
-                            {#
-                                {% if actionUrl == '_edit' %}
-                                    <a href="{{ path(table ~ '_edit', { id: entity.id }) }}" class="btn link-edit"><i class="icon-pencil"></i></a>
-                                {% elseif actionUrl == '_delete' %}
-                                    <a href="{{ path(table ~ '_delete', { id: entity.id }) }}" class="btn" onclick="if (confirm('Действительно удалить запись?')) { $.post($(this).attr('href'), function() { location.reload(); }); } return false;"><i class="icon-remove"></i></a>
-                                {% else %}
-                                    <a href="{{ actionUrl }}">{{ actionName }}</a>
-                                {% endif %}
-                            #}
                         {% endfor %}
                     </td>
                 </tr>

@@ -3,7 +3,7 @@
 {% form_theme form 'fields.twig' %}
 
 {% block content %}
-    <div class="span9 content content-update content-update-{{ table }}">
+    <div class="span10 content content-update content-update-{{ table }}">
         <h2>{{ webface_current_table_label }} / Редактирование</h2>
         {% include 'partials/flash.twig' %}
         <form action="{{ path(table ~ '_update', { id: entity.id }) }}" method="post" {{ form_enctype(form) }} class="{{ webface_need_groups is defined ? 'with-groups' : '' }}">

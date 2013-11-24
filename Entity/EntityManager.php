@@ -13,10 +13,18 @@ class EntityManager
     /** @var Application */
     protected $app;
 
+    /** @var string */
+    protected $table = null;
+
     public function __construct(Application $app, $table)
     {
         $this->app   = $app;
         $this->table = $table;
+    }
+
+    public function getTable()
+    {
+        return $this->table;
     }
 
     /**
